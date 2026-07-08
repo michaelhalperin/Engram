@@ -203,6 +203,38 @@ program
   });
 
 program
+  .command('review')
+  .description('review what your AIs wrote — approve, edit, or reject')
+  .action(async () => {
+    const { runReview } = await import('./review.js');
+    const store = openStore();
+    await runReview(store);
+    store.close();
+  });
+
+program
+  .command('ui')
+  .description('open the local web UI (what do my AIs know about me?)')
+  .option('-p, --port <n>', 'port to listen on', '5423')
+  .option('--no-open', 'do not open the browser')
+  .action(async (opts) => {
+    const { startUi } = await import('../ui/server.js');
+    const { spawn } = await import('node:child_process');
+    const store = openStore();
+    const { url } = await startUi(store, { port: Number(opts.port) || 5423 });
+    console.log(`engram ui → ${url}  ${dim('(local only; ctrl-c to stop)')}`);
+    if (opts.open !== false) {
+      const opener =
+        process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open';
+      try {
+        spawn(opener, [url], { stdio: 'ignore', detached: true }).unref();
+      } catch {
+        // No browser available; the URL is printed anyway.
+      }
+    }
+  });
+
+program
   .command('serve')
   .description('run the MCP server on stdio — this is what AI tools connect to')
   .action(async () => {

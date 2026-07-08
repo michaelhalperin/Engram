@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Engram — your memory</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1a1d21; --muted: #6b7280;
+    --border: #e4e7eb; --accent: #4f46e5; --green: #16a34a; --amber: #d97706;
+    --red: #dc2626; --chip: #eef0f3; --inbox-bg: #fffbeb; --inbox-border: #fde68a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101216; --panel: #191c22; --text: #e8eaed; --muted: #9aa1ab;
+      --border: #2a2f38; --accent: #818cf8; --green: #4ade80; --amber: #fbbf24;
+      --red: #f87171; --chip: #242933; --inbox-bg: #201a0d; --inbox-border: #4d3d14;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    max-width: 860px; margin: 0 auto; padding: 28px 20px 80px;
+  }
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+  header h1 { font-size: 26px; letter-spacing: -0.5px; }
+  header h1 .dot { color: var(--accent); }
+  .tagline { color: var(--muted); font-size: 14px; }
+  #counts { margin-left: auto; color: var(--muted); font-size: 13px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 22px; }
+  .sub code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--chip); padding: 1px 6px; border-radius: 5px; }
+
+  #inbox { background: var(--inbox-bg); border: 1px solid var(--inbox-border); border-radius: 12px; padding: 16px 16px 6px; margin-bottom: 26px; }
+  #inbox h2 { font-size: 15px; margin-bottom: 4px; }
+  #inbox .hint { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+
+  #toolbar { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+  input[type=search], select, textarea, input[type=text] {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px; font: inherit; outline: none;
+  }
+  input[type=search] { flex: 1; min-width: 200px; }
+  input[type=search]:focus, textarea:focus, input[type=text]:focus { border-color: var(--accent); }
+  button {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { opacity: .9; color: #fff; }
+  button.ghost { border: none; background: none; color: var(--muted); padding: 4px 8px; }
+  button.ghost:hover { color: var(--accent); }
+  button.approve { color: var(--green); border-color: var(--green); background: none; }
+  button.reject { color: var(--red); border-color: var(--red); background: none; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  .card .head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12.5px; }
+  .dot-status { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot-active { background: var(--green); }
+  .dot-unreviewed { background: var(--amber); }
+  .dot-archived { background: var(--muted); opacity: .5; }
+  .id { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
+  .chip { background: var(--chip); border-radius: 999px; padding: 2px 9px; font-size: 11.5px; color: var(--muted); }
+  .chip.type { color: var(--accent); }
+  .chip.source { font-style: normal; }
+  .spacer { margin-left: auto; }
+  .pin { background: none; border: none; font-size: 15px; cursor: pointer; padding: 2px 4px; opacity: .35; }
+  .pin.pinned { opacity: 1; }
+  .body { white-space: pre-wrap; word-break: break-word; }
+  .card .actions { display: flex; gap: 6px; margin-top: 10px; }
+  .card textarea { width: 100%; min-height: 72px; margin-bottom: 8px; resize: vertical; }
+  .card input[type=text] { width: 100%; margin-bottom: 8px; }
+  .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+  #addForm { margin-bottom: 18px; display: none; }
+  #addForm.open { display: block; }
+  #addForm .row { display: flex; gap: 10px; margin-bottom: 8px; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 12.5px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot">◉</span> engram</h1>
+  <span class="tagline">one memory · every AI · yours</span>
+  <span id="counts"></span>
+</header>
+<p class="sub">This is what your AIs know about you — and you control it. Files live in <code id="homePath">~/.engram/memories</code>.</p>
+
+<section id="inbox" hidden>
+  <h2>Review inbox</h2>
+  <p class="hint">Your AIs saved these and are waiting for your verdict.</p>
+  <div id="inboxList"></div>
+</section>
+
+<div id="toolbar">
+  <input type="search" id="q" placeholder="search your memory…">
+  <select id="statusFilter">
+    <option value="">all (not archived)</option>
+    <option value="active">active</option>
+    <option value="unreviewed">unreviewed</option>
+    <option value="archived">archived</option>
+  </select>
+  <select id="typeFilter">
+    <option value="">any type</option>
+  </select>
+  <button id="addBtn" class="primary">+ remember</button>
+</div>
+
+<div id="addForm" class="card">
+  <textarea id="addText" placeholder="One durable fact, phrased so it’s useful without context…"></textarea>
+  <div class="row">
+    <select id="addType"></select>
+    <input type="text" id="addTags" placeholder="tags, comma separated">
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)">
+      <input type="checkbox" id="addPin"> pin to profile
+    </label>
+  </div>
+  <div class="row">
+    <button class="primary" id="addSave">save</button>
+    <button id="addCancel">cancel</button>
+  </div>
+</div>
+
+<main id="list"></main>
+<footer>engram runs only on your machine · plain markdown you can grep, edit, and sync · <span id="version"></span></footer>
+
+<script>
+const TYPES = ['fact', 'preference', 'project', 'person', 'reference'];
+const state = { query: '', status: '', type: '' };
+let editingId = null;
+
+const $ = (id) => document.getElementById(id);
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'x-engram': '1', 'content-type': 'application/json', ...(options.headers || {}) },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+async function refresh() {
+  const params = new URLSearchParams();
+  if (state.query) params.set('query', state.query);
+  if (state.status) params.set('status', state.status);
+  if (state.type) params.set('type', state.type);
+  const data = await api('/api/state?' + params.toString(), { method: 'GET' });
+  renderCounts(data.counts);
+  renderInbox(data.inbox);
+  renderList(data.memories);
+}
+
+function renderCounts(counts) {
+  $('counts').textContent =
+    counts.active + ' active · ' + counts.unreviewed + ' in review · ' + counts.pinned + ' pinned';
+}
+
+function renderInbox(inbox) {
+  const section = $('inbox');
+  section.hidden = inbox.length === 0;
+  const container = $('inboxList');
+  container.replaceChildren(...inbox.map((m) => card(m, true)));
+}
+
+function renderList(memories) {
+  const container = $('list');
+  if (memories.length === 0) {
+    const empty = el('div', 'empty', state.query ? 'nothing matches that search' : 'no memories yet — tell your AI something worth keeping, or hit + remember');
+    container.replaceChildren(empty);
+    return;
+  }
+  container.replaceChildren(...memories.map((m) => card(m, false)));
+}
+
+function card(memory, inInbox) {
+  const root = el('article', 'card');
+  root.dataset.id = memory.id;
+
+  const head = el('div', 'head');
+  head.append(el('span', 'dot-status dot-' + memory.status));
+  head.append(el('span', 'id', memory.id));
+  head.append(el('span', 'chip type', memory.type));
+  for (const tag of memory.tags) head.append(el('span', 'chip', '#' + tag));
+  head.append(el('span', 'chip source', 'via ' + memory.source));
+  head.append(el('span', 'id', memory.updated.slice(0, 10)));
+  const spacer = el('span', 'spacer');
+  head.append(spacer);
+
+  const pin = el('button', 'pin' + (memory.pinned ? ' pinned' : ''), '★');
+  pin.title = memory.pinned ? 'unpin from profile' : 'pin to profile (shared with every AI)';
+  pin.onclick = () => patch(memory.id, { pinned: !memory.pinned });
+  head.append(pin);
+  root.append(head);
+
+  if (editingId === memory.id) {
+    const textarea = el('textarea');
+    textarea.value = memory.body;
+    const tagsInput = el('input');
+    tagsInput.type = 'text';
+    tagsInput.value = memory.tags.join(', ');
+    tagsInput.placeholder = 'tags, comma separated';
+    const actions = el('div', 'actions');
+    const save = el('button', 'primary', 'save');
+    save.onclick = () => {
+      patch(memory.id, { text: textarea.value, tags: tagsInput.value, status: inInbox ? 'active' : undefined });
+      editingId = null;
+    };
+    const cancel = el('button', null, 'cancel');
+    cancel.onclick = () => { editingId = null; refresh(); };
+    actions.append(save, cancel);
+    root.append(textarea, tagsInput, actions);
+    return root;
+  }
+
+  root.append(el('div', 'body', memory.body));
+
+  const actions = el('div', 'actions');
+  if (inInbox || memory.status === 'unreviewed') {
+    const approve = el('button', 'approve', '✓ approve');
+    approve.onclick = () => post(memory.id, 'approve');
+    const reject = el('button', 'reject', '✕ reject');
+    reject.onclick = () => post(memory.id, 'reject');
+    actions.append(approve, reject);
+  }
+  const edit = el('button', 'ghost', 'edit');
+  edit.onclick = () => { editingId = memory.id; refresh(); };
+  actions.append(edit);
+  if (memory.status === 'archived') {
+    const restore = el('button', 'ghost', 'restore');
+    restore.onclick = () => patch(memory.id, { status: 'active' });
+    const del = el('button', 'ghost', 'delete forever');
+    del.onclick = () => {
+      if (confirm('Permanently delete ' + memory.id + '? The file is removed from disk.')) {
+        api('/api/memories/' + memory.id + '?hard=1', { method: 'DELETE' }).then(refresh);
+      }
+    };
+    actions.append(restore, del);
+  } else if (!inInbox) {
+    const archive = el('button', 'ghost', 'archive');
+    archive.onclick = () => api('/api/memories/' + memory.id, { method: 'DELETE' }).then(refresh);
+    actions.append(archive);
+  }
+  root.append(actions);
+  return root;
+}
+
+async function patch(id, body) {
+  await api('/api/memories/' + id, { method: 'PATCH', body: JSON.stringify(body) });
+  refresh();
+}
+
+async function post(id, action) {
+  await api('/api/memories/' + id + '/' + action, { method: 'POST' });
+  refresh();
+}
+
+// toolbar
+let searchTimer;
+$('q').addEventListener('input', (e) => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { state.query = e.target.value.trim(); refresh(); }, 200);
+});
+$('statusFilter').addEventListener('change', (e) => { state.status = e.target.value; refresh(); });
+for (const t of TYPES) $('typeFilter').append(new Option(t, t)), $('addType').append(new Option(t, t));
+$('typeFilter').addEventListener('change', (e) => { state.type = e.target.value; refresh(); });
+
+$('addBtn').onclick = () => { $('addForm').classList.toggle('open'); $('addText').focus(); };
+$('addCancel').onclick = () => $('addForm').classList.remove('open');
+$('addSave').onclick = async () => {
+  const text = $('addText').value.trim();
+  if (!text) return;
+  await api('/api/memories', {
+    method: 'POST',
+    body: JSON.stringify({
+      text,
+      type: $('addType').value,
+      tags: $('addTags').value,
+      pinned: $('addPin').checked,
+    }),
+  });
+  $('addText').value = ''; $('addTags').value = ''; $('addPin').checked = false;
+  $('addForm').classList.remove('open');
+  refresh();
+};
+
+// live view: agents may write while this page is open
+setInterval(() => {
+  const active = document.activeElement;
+  const busy = active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT');
+  if (!busy && editingId === null) refresh();
+}, 5000);
+
+refresh().catch((err) => {
+  $('list').replaceChildren(el('div', 'empty', 'cannot reach engram: ' + err.message));
+});
+</script>
+</body>
+</html>
