@@ -203,6 +203,19 @@ program
   });
 
 program
+  .command('serve')
+  .description('run the MCP server on stdio — this is what AI tools connect to')
+  .action(async () => {
+    const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
+    const { createEngramServer } = await import('../mcp/server.js');
+    const store = openStore();
+    const server = createEngramServer(store);
+    await server.connect(new StdioServerTransport());
+    // stdout belongs to the MCP protocol; human-facing chatter goes to stderr.
+    console.error(`engram ${VERSION} mcp server ready (data: ${store.home})`);
+  });
+
+program
   .command('doctor')
   .description('check that engram is healthy on this machine')
   .action(() => {
