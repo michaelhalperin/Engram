@@ -1,0 +1,54 @@
+{
+  "name": "@michaelhalperin/engram",
+  "version": "0.1.0",
+  "description": "One memory. Every AI. Yours. A local-first, user-owned memory vault your AI tools plug into over MCP.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "memory",
+    "ai",
+    "claude",
+    "local-first",
+    "knowledge-base",
+    "second-brain"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/michaelhalperin/Engram.git"
+  },
+  "homepage": "https://github.com/michaelhalperin/Engram#readme",
+  "bugs": "https://github.com/michaelhalperin/Engram/issues",
+  "license": "MIT",
+  "author": "Michael Halperin",
+  "type": "module",
+  "bin": {
+    "engram": "dist/cli/main.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "dev": "tsc -w -p tsconfig.json",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "commander": "^15.0.0",
+    "gray-matter": "^4.0.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}
