@@ -93,7 +93,7 @@ last_confirmed: 2026-07-08T14:03:22.000Z
 Michael prefers TypeScript for new projects.
 ```
 
-`source` says which tool wrote it. `status` is the review state: agents write `unreviewed`, you promote to `active` (or archive). `last_confirmed` tracks freshness: it bumps when a human approves, an agent calls `confirm`, or the fact is restated — recall ranks fresh, reviewed facts above stale, unreviewed ones, and flags anything unconfirmed for 6+ months so models hedge instead of asserting. Files are the source of truth — hand-edit anything, even while the server is running; the SQLite FTS5 index catches up automatically. `ENGRAM_HOME` moves the vault (default `~/.engram`).
+`source` says which tool wrote it. `status` is the review state: agents write `unreviewed`, you promote to `active` (or archive). `last_confirmed` tracks freshness: it bumps when a human approves, an agent calls `confirm`, or the fact is restated — recall ranks fresh, reviewed facts above stale, unreviewed ones, and flags anything unconfirmed for 6+ months so models hedge instead of asserting. When an agent corrects a fact, the new version is a new file with a `supersedes: <old-id>` link and the old one is archived, never overwritten — and rejecting a correction in review restores the original. Files are the source of truth — hand-edit anything, even while the server is running; the SQLite FTS5 index catches up automatically. `ENGRAM_HOME` moves the vault (default `~/.engram`).
 
 ## Design stances
 

@@ -18,6 +18,8 @@ export interface Memory {
   updated: string;
   /** Last time the fact was re-affirmed as true (created, restated, confirmed, or approved). */
   lastConfirmed: string;
+  /** Id of the memory this one corrects. Corrections chain; old versions are archived, never overwritten. */
+  supersedes?: string;
   body: string;
 }
 

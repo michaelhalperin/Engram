@@ -42,6 +42,7 @@ function formatMemory(memory: Memory): string {
     `saved ${memory.created.slice(0, 10)} by ${memory.source}`,
     memory.status === 'unreviewed' ? 'unreviewed' : null,
     memory.pinned ? 'pinned' : null,
+    memory.supersedes ? `supersedes ${memory.supersedes}` : null,
     staleness(memory),
   ]
     .filter(Boolean)
@@ -162,7 +163,7 @@ export function createEngramServer(store: Store): McpServer {
     {
       title: 'Update a memory',
       description:
-        'Correct or refine an existing memory by id (use recall to find ids). The updated memory returns to the user’s review inbox.',
+        'Correct or refine an existing memory by id (use recall to find ids). Corrected text becomes a new memory that supersedes the old one (which is archived, never overwritten) and lands in the user’s review inbox.',
       inputSchema: {
         id: z.string().describe('Memory id, e.g. 20260708-prefers-typescript'),
         text: z.string().optional().describe('Replacement text'),
@@ -173,7 +174,22 @@ export function createEngramServer(store: Store): McpServer {
     },
     async ({ id, text: memoryText, type, tags }) => {
       try {
-        const memory = store.update(id, { text: memoryText, type, tags, status: 'unreviewed' });
+        if (memoryText !== undefined) {
+          const { memory, replaced } = store.supersede(id, {
+            text: memoryText,
+            type,
+            tags,
+            source: source(),
+          });
+          if (!replaced) return text(`Text unchanged — confirmed ${memory.id} as still accurate.`);
+          if (memory.supersedes !== id) {
+            return text(`That fact is already known as ${memory.id}; archived ${id}.`);
+          }
+          return text(
+            `Updated: ${memory.id} supersedes ${id} (old version archived, file kept). The new memory is unreviewed until the user approves it.`,
+          );
+        }
+        const memory = store.update(id, { type, tags, status: 'unreviewed' });
         return text(`Updated ${memory.id}. It is marked unreviewed until the user approves it.`);
       } catch (err) {
         return text((err as Error).message, true);

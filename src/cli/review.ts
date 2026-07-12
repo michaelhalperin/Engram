@@ -63,9 +63,15 @@ export async function runReview(store: Store): Promise<void> {
           console.log(yellow('editor exited non-zero — skipped'));
         }
       } else if (answer === 'r') {
-        store.archive(memory.id);
+        const { restored } = store.reject(memory.id);
         rejected++;
-        console.log(red('rejected (archived — file kept)'));
+        console.log(
+          red(
+            restored
+              ? `rejected (archived — file kept) — restored ${restored.id}`
+              : 'rejected (archived — file kept)',
+          ),
+        );
       } else if (answer === 'q') {
         skipped += queue.length - approved - rejected - skipped;
         break;

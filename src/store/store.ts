@@ -166,9 +166,57 @@ export class Store {
     return memory;
   }
 
+  /**
+   * Correct a fact without destroying history: a new memory is created with a
+   * `supersedes` link back to the old one, and the old one is archived (file
+   * kept). If the new text is just a restatement of the old, it becomes a
+   * confirmation instead. The successor is never pinned — pinning is a human act.
+   */
+  supersede(
+    id: string,
+    input: { text: string; type?: Memory['type']; tags?: string[]; source: string },
+  ): { memory: Memory; replaced?: Memory } {
+    const old = this.get(id);
+    if (!old) throw new Error(`no memory with id ${JSON.stringify(id)}`);
+    const { memory, existing } = this.create({
+      text: input.text,
+      type: input.type ?? old.type,
+      tags: input.tags ?? old.tags,
+      source: input.source,
+      status: 'unreviewed',
+    });
+    if (memory.id === old.id) {
+      // Same fact restated: confirm rather than fork a duplicate chain.
+      return { memory: this.confirm(old.id) };
+    }
+    if (!existing) {
+      memory.supersedes = old.id;
+      this.writeFile(memory);
+    }
+    this.archive(old.id);
+    return { memory, replaced: old };
+  }
+
   /** Soft delete: the file stays (greppable, restorable), search stops seeing it. */
   archive(id: string): Memory {
     return this.update(id, { status: 'archived' });
+  }
+
+  /**
+   * Reject a memory in review: archive it, and if it superseded another memory,
+   * restore that one — refusing the correction means the original still stands.
+   */
+  reject(id: string): { memory: Memory; restored?: Memory } {
+    const memory = this.get(id);
+    if (!memory) throw new Error(`no memory with id ${JSON.stringify(id)}`);
+    const archived = this.archive(id);
+    if (memory.supersedes) {
+      const predecessor = this.get(memory.supersedes);
+      if (predecessor && predecessor.status === 'archived') {
+        return { memory: archived, restored: this.update(predecessor.id, { status: 'active' }) };
+      }
+    }
+    return { memory: archived };
   }
 
   /** Human review is the strongest confirmation there is. */

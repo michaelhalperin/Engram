@@ -125,7 +125,8 @@ export function startUi(store: Store, opts: { port?: number } = {}): Promise<UiH
           return send(res, 200, { memory: store.approve(id) });
         }
         if (method === 'POST' && action === 'reject') {
-          return send(res, 200, { memory: store.archive(id) });
+          const { memory, restored } = store.reject(id);
+          return send(res, 200, { memory, restored });
         }
         if (method === 'PATCH' && !action) {
           const body = await readBody(req);

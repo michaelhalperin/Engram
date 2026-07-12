@@ -107,7 +107,7 @@ describe('mcp server', () => {
     expect(resultText(result)).toContain('600 rpm');
   });
 
-  it('update rewrites text and returns the memory to the review inbox', async () => {
+  it('update with new text creates a successor and archives the original', async () => {
     const saved = await client.callTool({ name: 'remember', arguments: { text: 'Standup is at 10am' } });
     const id = resultText(saved).match(/Remembered as (\S+)\./)![1];
     store.approve(id);
@@ -116,10 +116,41 @@ describe('mcp server', () => {
       name: 'update',
       arguments: { id, text: 'Standup is at 9:30am' },
     });
-    expect(resultText(result)).toContain('Updated');
+    const message = resultText(result);
+    expect(message).toContain(`supersedes ${id}`);
+
+    const newId = message.match(/Updated: (\S+) supersedes/)![1];
+    const successor = store.get(newId)!;
+    expect(successor.body).toBe('Standup is at 9:30am');
+    expect(successor.status).toBe('unreviewed');
+    expect(successor.supersedes).toBe(id);
+    expect(store.get(id)!.status).toBe('archived');
+    expect(readFileSync(store.pathFor(newId), 'utf8')).toContain(`supersedes: ${id}`);
+  });
+
+  it('update with unchanged text is a confirmation, not a fork', async () => {
+    const saved = await client.callTool({ name: 'remember', arguments: { text: 'Standup is at 10am' } });
+    const id = resultText(saved).match(/Remembered as (\S+)\./)![1];
+    const result = await client.callTool({
+      name: 'update',
+      arguments: { id, text: 'standup is at 10am' },
+    });
+    expect(resultText(result)).toContain('confirmed');
+    expect(store.get(id)!.status).toBe('unreviewed');
+    expect(store.list({ status: 'archived' })).toHaveLength(0);
+  });
+
+  it('update with only metadata keeps the same memory in place', async () => {
+    const saved = await client.callTool({ name: 'remember', arguments: { text: 'Standup is at 10am' } });
+    const id = resultText(saved).match(/Remembered as (\S+)\./)![1];
+    const result = await client.callTool({
+      name: 'update',
+      arguments: { id, tags: ['rituals'] },
+    });
+    expect(resultText(result)).toContain(`Updated ${id}`);
     const memory = store.get(id)!;
-    expect(memory.body).toBe('Standup is at 9:30am');
-    expect(memory.status).toBe('unreviewed');
+    expect(memory.tags).toEqual(['rituals']);
+    expect(memory.supersedes).toBeUndefined();
   });
 
   it('confirm bumps lastConfirmed without touching content or review status', async () => {

@@ -15,7 +15,7 @@ const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
 process.emitWarning = originalEmitWarning;
 
 /** Bump when SCHEMA changes shape; the index is derived, so we rebuild instead of migrating. */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS memories (
@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS memories (
   created        TEXT NOT NULL,
   updated        TEXT NOT NULL,
   last_confirmed TEXT NOT NULL,
+  supersedes     TEXT,
   body           TEXT NOT NULL,
   hash           TEXT NOT NULL,
   mtime          INTEGER NOT NULL,
@@ -50,6 +51,7 @@ interface Row {
   created: string;
   updated: string;
   last_confirmed: string;
+  supersedes: string | null;
   body: string;
   snippet?: string;
   rank?: number;
@@ -66,6 +68,7 @@ function rowToMemory(row: Row): Memory {
     created: row.created,
     updated: row.updated,
     lastConfirmed: row.last_confirmed,
+    supersedes: row.supersedes ?? undefined,
     body: row.body,
   };
 }
@@ -141,13 +144,13 @@ export class IndexDb {
   upsert(memory: Memory, hash: string, mtime: number, size: number): void {
     this.db
       .prepare(
-        `INSERT INTO memories (id, type, tags, source, status, pinned, created, updated, last_confirmed, body, hash, mtime, size)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO memories (id, type, tags, source, status, pinned, created, updated, last_confirmed, supersedes, body, hash, mtime, size)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            type = excluded.type, tags = excluded.tags, source = excluded.source,
            status = excluded.status, pinned = excluded.pinned, created = excluded.created,
            updated = excluded.updated, last_confirmed = excluded.last_confirmed,
-           body = excluded.body, hash = excluded.hash,
+           supersedes = excluded.supersedes, body = excluded.body, hash = excluded.hash,
            mtime = excluded.mtime, size = excluded.size`,
       )
       .run(
@@ -160,6 +163,7 @@ export class IndexDb {
         memory.created,
         memory.updated,
         memory.lastConfirmed,
+        memory.supersedes ?? null,
         memory.body,
         hash,
         mtime,

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import {
   MEMORY_STATUSES,
   MEMORY_TYPES,
+  VALID_ID,
   type Memory,
   type MemoryStatus,
   type MemoryType,
@@ -88,6 +89,10 @@ export function parseMemoryFile(id: string, raw: string, fallbackIso: string): M
     created,
     updated: asIso(data.updated, fallbackIso),
     lastConfirmed: asIso(data.last_confirmed, created),
+    supersedes:
+      typeof data.supersedes === 'string' && VALID_ID.test(data.supersedes)
+        ? data.supersedes
+        : undefined,
     body: body.trim(),
   };
 }
@@ -102,5 +107,6 @@ export function serializeMemory(memory: Memory): string {
     created: memory.created,
     updated: memory.updated,
     last_confirmed: memory.lastConfirmed,
+    ...(memory.supersedes ? { supersedes: memory.supersedes } : {}),
   });
 }

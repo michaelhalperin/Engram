@@ -86,6 +86,76 @@ describe('update / archive', () => {
   });
 });
 
+describe('supersede / reject', () => {
+  it('supersede links the successor, archives the original, and inherits type/tags', () => {
+    const { memory: old } = store.create({
+      text: 'Standup is at 10am',
+      type: 'fact',
+      tags: ['rituals'],
+      source: 'cli',
+    });
+    const { memory, replaced } = store.supersede(old.id, {
+      text: 'Standup is at 9:30am',
+      source: 'mcp',
+    });
+    expect(replaced!.id).toBe(old.id);
+    expect(memory.supersedes).toBe(old.id);
+    expect(memory.type).toBe('fact');
+    expect(memory.tags).toEqual(['rituals']);
+    expect(memory.status).toBe('unreviewed');
+    expect(store.get(old.id)!.status).toBe('archived');
+    expect(readFileSync(store.pathFor(memory.id), 'utf8')).toContain(`supersedes: ${old.id}`);
+  });
+
+  it('supersede with a restatement of the same text confirms instead of forking', async () => {
+    const { memory: old } = store.create({ text: 'Deploys go out Fridays', source: 'cli' });
+    await new Promise((r) => setTimeout(r, 5));
+    const { memory, replaced } = store.supersede(old.id, {
+      text: 'deploys go out  fridays',
+      source: 'mcp',
+    });
+    expect(replaced).toBeUndefined();
+    expect(memory.id).toBe(old.id);
+    expect(Date.parse(memory.lastConfirmed)).toBeGreaterThan(Date.parse(old.lastConfirmed));
+    expect(readdirSync(join(home, 'memories'))).toHaveLength(1);
+  });
+
+  it('reject archives the correction and restores what it superseded', () => {
+    const { memory: old } = store.create({ text: 'The staging URL is stage.example.com', source: 'cli' });
+    const { memory: successor } = store.supersede(old.id, {
+      text: 'The staging URL is stage-wrong.example.com',
+      source: 'mcp',
+    });
+    const { restored } = store.reject(successor.id);
+    expect(restored!.id).toBe(old.id);
+    expect(store.get(successor.id)!.status).toBe('archived');
+    expect(store.get(old.id)!.status).toBe('active');
+  });
+
+  it('superseding a pinned memory never pins the successor; rejecting restores the profile', () => {
+    const { memory: old } = store.create({
+      text: 'Michael works at Acme Corp',
+      source: 'cli',
+      pinned: true,
+    });
+    const { memory: successor } = store.supersede(old.id, {
+      text: 'Michael works at Evil Corp',
+      source: 'mcp',
+    });
+    expect(successor.pinned).toBe(false);
+    expect(store.pinned()).toHaveLength(0);
+    store.reject(successor.id);
+    expect(store.pinned().map((m) => m.id)).toEqual([old.id]);
+  });
+
+  it('reject without a supersedes link just archives', () => {
+    const { memory } = store.create({ text: 'A plain unlinked memory', source: 'mcp' });
+    const { restored } = store.reject(memory.id);
+    expect(restored).toBeUndefined();
+    expect(store.get(memory.id)!.status).toBe('archived');
+  });
+});
+
 describe('confirm / staleness', () => {
   it('create stamps lastConfirmed and persists it as last_confirmed frontmatter', () => {
     const { memory } = store.create({ text: 'Standup is at 10am daily', source: 'cli' });
