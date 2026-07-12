@@ -14,20 +14,24 @@ const require = createRequire(import.meta.url);
 const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
 process.emitWarning = originalEmitWarning;
 
+/** Bump when SCHEMA changes shape; the index is derived, so we rebuild instead of migrating. */
+const SCHEMA_VERSION = 2;
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS memories (
-  id      TEXT PRIMARY KEY,
-  type    TEXT NOT NULL,
-  tags    TEXT NOT NULL,
-  source  TEXT NOT NULL,
-  status  TEXT NOT NULL,
-  pinned  INTEGER NOT NULL,
-  created TEXT NOT NULL,
-  updated TEXT NOT NULL,
-  body    TEXT NOT NULL,
-  hash    TEXT NOT NULL,
-  mtime   INTEGER NOT NULL,
-  size    INTEGER NOT NULL
+  id             TEXT PRIMARY KEY,
+  type           TEXT NOT NULL,
+  tags           TEXT NOT NULL,
+  source         TEXT NOT NULL,
+  status         TEXT NOT NULL,
+  pinned         INTEGER NOT NULL,
+  created        TEXT NOT NULL,
+  updated        TEXT NOT NULL,
+  last_confirmed TEXT NOT NULL,
+  body           TEXT NOT NULL,
+  hash           TEXT NOT NULL,
+  mtime          INTEGER NOT NULL,
+  size           INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_memories_status ON memories(status);
 CREATE INDEX IF NOT EXISTS idx_memories_hash ON memories(hash);
@@ -45,8 +49,10 @@ interface Row {
   pinned: number;
   created: string;
   updated: string;
+  last_confirmed: string;
   body: string;
   snippet?: string;
+  rank?: number;
 }
 
 function rowToMemory(row: Row): Memory {
@@ -59,8 +65,31 @@ function rowToMemory(row: Row): Memory {
     pinned: row.pinned === 1,
     created: row.created,
     updated: row.updated,
+    lastConfirmed: row.last_confirmed,
     body: row.body,
   };
+}
+
+const DAY_MS = 86_400_000;
+/** Unreviewed agent writes rank below human-approved facts of equal relevance. */
+const UNREVIEWED_WEIGHT = 0.85;
+/** Pinned facts are the user's declared core — boost them. */
+const PINNED_BOOST = 1.25;
+/**
+ * Freshness decays with time since the fact was last confirmed true, halving
+ * once a year but never below the floor — old memories fade, they don't vanish.
+ */
+const FRESHNESS_FLOOR = 0.6;
+const FRESHNESS_HALF_LIFE_DAYS = 365;
+
+/** Higher is better. Blends BM25 relevance with trust (status, pinned) and freshness. */
+function scoreHit(row: Row, now: number): number {
+  const relevance = -(row.rank ?? 0); // fts5 bm25 rank: more negative = better match
+  const confirmed = Date.parse(row.last_confirmed);
+  const days = Number.isFinite(confirmed) ? Math.max(0, (now - confirmed) / DAY_MS) : Infinity;
+  const freshness = FRESHNESS_FLOOR + (1 - FRESHNESS_FLOOR) * 2 ** (-days / FRESHNESS_HALF_LIFE_DAYS);
+  const trust = (row.status === 'unreviewed' ? UNREVIEWED_WEIGHT : 1) * (row.pinned === 1 ? PINNED_BOOST : 1);
+  return relevance * trust * freshness;
 }
 
 /** `null` when the query contains no indexable terms. */
@@ -85,6 +114,14 @@ export class IndexDb {
   constructor(path: string) {
     this.db = new DatabaseSync(path);
     if (path !== ':memory:') this.db.exec('PRAGMA journal_mode = WAL;');
+    const { user_version: version } = this.db.prepare('PRAGMA user_version').get() as {
+      user_version: number;
+    };
+    if (version !== SCHEMA_VERSION) {
+      // Older (or newer) index layout: drop it and let sync() rebuild from the files.
+      this.db.exec('DROP TABLE IF EXISTS memories; DROP TABLE IF EXISTS memories_fts;');
+      this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
+    }
     this.db.exec(SCHEMA);
   }
 
@@ -104,12 +141,13 @@ export class IndexDb {
   upsert(memory: Memory, hash: string, mtime: number, size: number): void {
     this.db
       .prepare(
-        `INSERT INTO memories (id, type, tags, source, status, pinned, created, updated, body, hash, mtime, size)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO memories (id, type, tags, source, status, pinned, created, updated, last_confirmed, body, hash, mtime, size)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            type = excluded.type, tags = excluded.tags, source = excluded.source,
            status = excluded.status, pinned = excluded.pinned, created = excluded.created,
-           updated = excluded.updated, body = excluded.body, hash = excluded.hash,
+           updated = excluded.updated, last_confirmed = excluded.last_confirmed,
+           body = excluded.body, hash = excluded.hash,
            mtime = excluded.mtime, size = excluded.size`,
       )
       .run(
@@ -121,6 +159,7 @@ export class IndexDb {
         memory.pinned ? 1 : 0,
         memory.created,
         memory.updated,
+        memory.lastConfirmed,
         memory.body,
         hash,
         mtime,
@@ -182,12 +221,14 @@ export class IndexDb {
     const match = ftsQuery(query);
     if (!match) return [];
     const statusCondition = opts.status ? 'm.status = ?' : "m.status != 'archived'";
+    const limit = Math.min(opts.limit ?? 8, 50);
     const params: Array<string | number> = [match];
     if (opts.status) params.push(opts.status);
-    params.push(Math.min(opts.limit ?? 8, 50));
+    // Over-fetch by BM25, then re-rank with trust and freshness in JS.
+    params.push(Math.max(limit * 4, 50));
     const rows = this.db
       .prepare(
-        `SELECT m.*, snippet(memories_fts, 1, '', '', ' … ', 18) AS snippet
+        `SELECT m.*, snippet(memories_fts, 1, '', '', ' … ', 18) AS snippet, rank
          FROM memories_fts
          JOIN memories m ON m.id = memories_fts.id
          WHERE memories_fts MATCH ? AND ${statusCondition}
@@ -195,7 +236,12 @@ export class IndexDb {
          LIMIT ?`,
       )
       .all(...params) as unknown as Row[];
-    return rows.map((row) => ({ ...rowToMemory(row), snippet: row.snippet ?? '' }));
+    const now = Date.now();
+    return rows
+      .map((row) => ({ row, score: scoreHit(row, now) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(({ row }) => ({ ...rowToMemory(row), snippet: row.snippet ?? '' }));
   }
 
   counts(): Record<Memory['status'] | 'pinned', number> {

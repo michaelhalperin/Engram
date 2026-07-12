@@ -75,6 +75,7 @@ export function parseMemoryFile(id: string, raw: string, fallbackIso: string): M
   } catch {
     // Broken YAML: treat the whole file as body.
   }
+  const created = asIso(data.created, fallbackIso);
   return {
     id,
     type: MEMORY_TYPES.includes(data.type as MemoryType) ? (data.type as MemoryType) : 'fact',
@@ -84,8 +85,9 @@ export function parseMemoryFile(id: string, raw: string, fallbackIso: string): M
       ? (data.status as MemoryStatus)
       : 'active',
     pinned: data.pinned === true,
-    created: asIso(data.created, fallbackIso),
+    created,
     updated: asIso(data.updated, fallbackIso),
+    lastConfirmed: asIso(data.last_confirmed, created),
     body: body.trim(),
   };
 }
@@ -99,5 +101,6 @@ export function serializeMemory(memory: Memory): string {
     pinned: memory.pinned,
     created: memory.created,
     updated: memory.updated,
+    last_confirmed: memory.lastConfirmed,
   });
 }

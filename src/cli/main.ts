@@ -168,6 +168,18 @@ program
   });
 
 program
+  .command('confirm')
+  .description('mark a memory as re-verified — fresh memories rank higher in recall')
+  .argument('<id>')
+  .action((id: string) => {
+    const store = openStore();
+    if (!store.get(id)) fail(`no memory with id ${JSON.stringify(id)}`);
+    store.confirm(id);
+    console.log(`${green('✓')} confirmed ${id}`);
+    store.close();
+  });
+
+program
   .command('pin')
   .description('pin a memory into the core profile served to AI tools')
   .argument('<id>')

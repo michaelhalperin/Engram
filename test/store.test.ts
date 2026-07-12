@@ -86,6 +86,48 @@ describe('update / archive', () => {
   });
 });
 
+describe('confirm / staleness', () => {
+  it('create stamps lastConfirmed and persists it as last_confirmed frontmatter', () => {
+    const { memory } = store.create({ text: 'Standup is at 10am daily', source: 'cli' });
+    expect(memory.lastConfirmed).toBe(memory.created);
+    expect(readFileSync(store.pathFor(memory.id), 'utf8')).toContain('last_confirmed:');
+  });
+
+  it('confirm bumps lastConfirmed but not updated', async () => {
+    const { memory } = store.create({ text: 'The API gateway is Kong', source: 'cli' });
+    await new Promise((r) => setTimeout(r, 5));
+    const confirmed = store.confirm(memory.id);
+    expect(Date.parse(confirmed.lastConfirmed)).toBeGreaterThan(Date.parse(memory.lastConfirmed));
+    expect(confirmed.updated).toBe(memory.updated);
+    expect(confirmed.body).toBe(memory.body);
+  });
+
+  it('approve activates and counts as a confirmation', async () => {
+    const { memory } = store.create({ text: 'CI runs on GitHub Actions', source: 'mcp', status: 'unreviewed' });
+    await new Promise((r) => setTimeout(r, 5));
+    const approved = store.approve(memory.id);
+    expect(approved.status).toBe('active');
+    expect(Date.parse(approved.lastConfirmed)).toBeGreaterThan(Date.parse(memory.lastConfirmed));
+  });
+
+  it('rewriting the text counts as a fresh assertion', async () => {
+    const { memory } = store.create({ text: 'Standup is at 10am', source: 'cli' });
+    await new Promise((r) => setTimeout(r, 5));
+    const updated = store.update(memory.id, { text: 'Standup is at 9:30am' });
+    expect(Date.parse(updated.lastConfirmed)).toBeGreaterThan(Date.parse(memory.lastConfirmed));
+  });
+
+  it('files without last_confirmed default it to created', () => {
+    writeFileSync(
+      join(home, 'memories', 'legacy-memory.md'),
+      '---\ncreated: 2025-01-01T00:00:00.000Z\n---\nA memory from before staleness existed.\n',
+    );
+    const fresh = new Store(home);
+    expect(fresh.get('legacy-memory')!.lastConfirmed).toBe('2025-01-01T00:00:00.000Z');
+    fresh.close();
+  });
+});
+
 describe('search', () => {
   it('ranks documents matching more terms higher', () => {
     store.create({ text: 'Our deploy pipeline uses blue green deploy strategy on AWS', source: 'cli' });
@@ -107,6 +149,34 @@ describe('search', () => {
     expect(() => store.search('"; DROP TABLE -- ()*')).not.toThrow();
     expect(store.search('!!! ???')).toEqual([]);
     expect(store.search('normal')).toHaveLength(1);
+  });
+
+  it('ranks approved memories above unreviewed ones of equal relevance', () => {
+    // Same length, same matching terms — BM25 ties; trust breaks it.
+    const unreviewed = store.create({
+      text: 'Deploy window opens Friday morning maybe',
+      source: 'mcp',
+      status: 'unreviewed',
+    });
+    const active = store.create({
+      text: 'Deploy window opens Friday morning yes',
+      source: 'cli',
+      status: 'active',
+    });
+    const hits = store.search('deploy window friday');
+    expect(hits.map((h) => h.id)).toEqual([active.memory.id, unreviewed.memory.id]);
+  });
+
+  it('ranks recently confirmed memories above long-unconfirmed ones', () => {
+    const old = new Date(Date.now() - 500 * 86_400_000).toISOString();
+    writeFileSync(
+      join(home, 'memories', 'stale-deploy-fact.md'),
+      `---\nstatus: active\ncreated: ${old}\nlast_confirmed: ${old}\n---\nDeploys happen Monday evenings always\n`,
+    );
+    store.sync();
+    const fresh = store.create({ text: 'Deploys happen Friday mornings always', source: 'cli' });
+    const hits = store.search('deploys happen always');
+    expect(hits.map((h) => h.id)).toEqual([fresh.memory.id, 'stale-deploy-fact']);
   });
 
   it('stems words (porter): "preferences" finds "prefers"', () => {
@@ -158,6 +228,17 @@ describe('files are the source of truth', () => {
     const result = store.sync();
     expect(result.removed).toBe(1);
     expect(store.list()).toHaveLength(0);
+  });
+
+  it('rebuilds the index from files when the schema version changes', async () => {
+    const { memory } = store.create({ text: 'Fact that must survive schema bumps', source: 'cli' });
+    store.close();
+    const { DatabaseSync } = await import('node:sqlite');
+    const raw = new DatabaseSync(join(home, 'index.db'));
+    raw.exec('PRAGMA user_version = 0;');
+    raw.close();
+    store = new Store(home);
+    expect(store.search('survive schema').map((h) => h.id)).toContain(memory.id);
   });
 
   it('reindex is idempotent', () => {

@@ -129,6 +129,7 @@ export class Store {
       pinned: input.pinned ?? false,
       created: now,
       updated: now,
+      lastConfirmed: now,
       body,
     };
     this.writeFile(memory);
@@ -151,6 +152,8 @@ export class Store {
       const body = patch.text.trim();
       validateBody(body);
       memory.body = body;
+      // Restating the fact is a fresh assertion that it is true.
+      memory.lastConfirmed = new Date().toISOString();
     }
     if (patch.type !== undefined) memory.type = patch.type;
     if (patch.tags !== undefined) {
@@ -168,8 +171,19 @@ export class Store {
     return this.update(id, { status: 'archived' });
   }
 
+  /** Human review is the strongest confirmation there is. */
   approve(id: string): Memory {
-    return this.update(id, { status: 'active' });
+    this.update(id, { status: 'active' });
+    return this.confirm(id);
+  }
+
+  /** Re-affirm a fact as still true. Bumps `lastConfirmed` without touching the content. */
+  confirm(id: string): Memory {
+    const memory = this.get(id);
+    if (!memory) throw new Error(`no memory with id ${JSON.stringify(id)}`);
+    memory.lastConfirmed = new Date().toISOString();
+    this.writeFile(memory);
+    return memory;
   }
 
   /** Hard delete. The CLI asks for --hard; agents never get this. */

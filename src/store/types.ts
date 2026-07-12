@@ -16,6 +16,8 @@ export interface Memory {
   pinned: boolean;
   created: string;
   updated: string;
+  /** Last time the fact was re-affirmed as true (created, restated, confirmed, or approved). */
+  lastConfirmed: string;
   body: string;
 }
 

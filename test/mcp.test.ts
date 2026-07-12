@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -37,9 +37,15 @@ afterEach(async () => {
 });
 
 describe('mcp server', () => {
-  it('exposes exactly the four tools and the profile resource', async () => {
+  it('exposes exactly the five tools and the profile resource', async () => {
     const tools = await client.listTools();
-    expect(tools.tools.map((t) => t.name).sort()).toEqual(['forget', 'recall', 'remember', 'update']);
+    expect(tools.tools.map((t) => t.name).sort()).toEqual([
+      'confirm',
+      'forget',
+      'recall',
+      'remember',
+      'update',
+    ]);
     const resources = await client.listResources();
     expect(resources.resources.map((r) => r.uri)).toEqual(['engram://profile']);
   });
@@ -114,6 +120,39 @@ describe('mcp server', () => {
     const memory = store.get(id)!;
     expect(memory.body).toBe('Standup is at 9:30am');
     expect(memory.status).toBe('unreviewed');
+  });
+
+  it('confirm bumps lastConfirmed without touching content or review status', async () => {
+    const saved = await client.callTool({ name: 'remember', arguments: { text: 'Deploys go out Friday mornings' } });
+    const id = resultText(saved).match(/Remembered as (\S+)\./)![1];
+    const before = store.get(id)!;
+    await new Promise((r) => setTimeout(r, 5));
+
+    const result = await client.callTool({ name: 'confirm', arguments: { id } });
+    expect(resultText(result)).toContain('Confirmed');
+    const after = store.get(id)!;
+    expect(Date.parse(after.lastConfirmed)).toBeGreaterThan(Date.parse(before.lastConfirmed));
+    expect(after.body).toBe(before.body);
+    expect(after.status).toBe('unreviewed');
+  });
+
+  it('confirm on a bogus id is a tool error, not a crash', async () => {
+    const result = await client.callTool({ name: 'confirm', arguments: { id: 'does-not-exist' } });
+    expect(result.isError).toBe(true);
+  });
+
+  it('recall flags memories that have not been confirmed in a long time', async () => {
+    const old = new Date(Date.now() - 400 * 86_400_000).toISOString();
+    writeFileSync(
+      join(home, 'memories', 'ancient-fact.md'),
+      `---\ntype: fact\nsource: cli\nstatus: active\ncreated: ${old}\nlast_confirmed: ${old}\n---\nThe staging server lives at stage.example.com\n`,
+    );
+    store.sync();
+    const result = await client.callTool({ name: 'recall', arguments: { query: 'staging server' } });
+    const message = resultText(result);
+    expect(message).toContain('stage.example.com');
+    expect(message).toContain('not confirmed in');
+    expect(message).toContain('may be stale');
   });
 
   it('forget archives; recall stops returning it', async () => {
