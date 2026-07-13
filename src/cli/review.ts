@@ -33,6 +33,9 @@ export async function runReview(store: Store): Promise<void> {
   try {
     for (const memory of queue) {
       console.log(`\n${memoryCard(memory)}`);
+      for (const conflict of store.findConflicts(memory)) {
+        console.log(yellow(`  ⚠ possibly conflicts with ${conflict.id}: ${conflict.body}`));
+      }
       const answer = (
         await rl.question(
           `${green('[a]')}pprove  ${yellow('[e]')}dit  ${red('[r]')}eject  [s]kip  [q]uit > `,

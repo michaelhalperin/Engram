@@ -10,8 +10,9 @@ import {
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { isPotentialConflict, scopesCanConflict, tokenSet } from './conflicts.js';
 import { IndexDb } from './db.js';
-import { bodyHash, makeId, parseMemoryFile, serializeMemory } from './files.js';
+import { bodyHash, makeId, normalizeScope, parseMemoryFile, serializeMemory } from './files.js';
 import {
   MAX_BODY_BYTES,
   VALID_ID,
@@ -127,6 +128,7 @@ export class Store {
       source: input.source.trim() || 'unknown',
       status: input.status ?? 'active',
       pinned: input.pinned ?? false,
+      scope: normalizeScope(input.scope),
       created: now,
       updated: now,
       lastConfirmed: now,
@@ -161,6 +163,9 @@ export class Store {
     }
     if (patch.status !== undefined) memory.status = patch.status;
     if (patch.pinned !== undefined) memory.pinned = patch.pinned;
+    if (patch.scope !== undefined) {
+      memory.scope = patch.scope === null ? undefined : normalizeScope(patch.scope);
+    }
     memory.updated = new Date().toISOString();
     this.writeFile(memory);
     return memory;
@@ -174,7 +179,7 @@ export class Store {
    */
   supersede(
     id: string,
-    input: { text: string; type?: Memory['type']; tags?: string[]; source: string },
+    input: { text: string; type?: Memory['type']; tags?: string[]; source: string; scope?: string },
   ): { memory: Memory; replaced?: Memory } {
     const old = this.get(id);
     if (!old) throw new Error(`no memory with id ${JSON.stringify(id)}`);
@@ -184,6 +189,7 @@ export class Store {
       tags: input.tags ?? old.tags,
       source: input.source,
       status: 'unreviewed',
+      scope: input.scope ?? old.scope,
     });
     if (memory.id === old.id) {
       // Same fact restated: confirm rather than fork a duplicate chain.
@@ -242,12 +248,38 @@ export class Store {
 
   list(filter: ListFilter = {}): Memory[] {
     this.maybeSync();
-    return this.db.list(filter);
+    return this.db.list(
+      filter.scope === undefined ? filter : { ...filter, scope: normalizeScope(filter.scope) },
+    );
   }
 
-  search(query: string, opts: { limit?: number; status?: Memory['status'] } = {}): SearchHit[] {
+  search(
+    query: string,
+    opts: { limit?: number; status?: Memory['status']; scope?: string } = {},
+  ): SearchHit[] {
     this.maybeSync();
-    return this.db.search(query, opts);
+    return this.db.search(query, { ...opts, scope: normalizeScope(opts.scope) });
+  }
+
+  /**
+   * Existing non-archived memories that plausibly contradict this one: they
+   * share most of their informative words but say something different. Purely
+   * heuristic — callers should present these as "possibly conflicts with" and
+   * let an agent or the human reviewer decide.
+   */
+  findConflicts(memory: Memory, limit = 3): Memory[] {
+    this.maybeSync();
+    const tokens = tokenSet(memory.body);
+    const candidates = this.db.search(memory.body, { limit: 20, scope: memory.scope });
+    const conflicts: Memory[] = [];
+    for (const candidate of candidates) {
+      if (candidate.id === memory.id || candidate.id === memory.supersedes) continue;
+      if (!scopesCanConflict(memory.scope, candidate.scope)) continue;
+      if (!isPotentialConflict(tokens, tokenSet(candidate.body))) continue;
+      conflicts.push(candidate);
+      if (conflicts.length >= limit) break;
+    }
+    return conflicts;
   }
 
   /** The core profile: pinned, non-archived memories. */

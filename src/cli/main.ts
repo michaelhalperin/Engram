@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Command } from 'commander';
 import { Store, defaultHome } from '../store/store.js';
 import { MEMORY_STATUSES, MEMORY_TYPES, type MemoryStatus, type MemoryType } from '../store/types.js';
@@ -45,12 +47,26 @@ function parseTags(value: string | undefined): string[] | undefined {
   return value.split(',').map((t) => t.trim()).filter(Boolean);
 }
 
+/** The HTTP bearer token lives next to the vault, readable only by the user. */
+function loadOrCreateHttpToken(home: string): string {
+  const path = join(home, 'http-token');
+  if (existsSync(path)) {
+    const token = readFileSync(path, 'utf8').trim();
+    if (token) return token;
+  }
+  const token = randomBytes(32).toString('base64url');
+  writeFileSync(path, `${token}\n`, { mode: 0o600 });
+  console.error(`generated http token → ${path}`);
+  return token;
+}
+
 program
   .command('add')
   .description('save a memory')
   .argument('<text...>', 'the memory text')
   .option('-t, --type <type>', `one of: ${MEMORY_TYPES.join(', ')}`, 'fact')
   .option('--tags <tags>', 'comma-separated tags')
+  .option('--scope <scope>', 'project/workspace this fact belongs to (omit for global)')
   .option('--pin', 'pin into the core profile served to AI tools')
   .option('--source <source>', 'provenance label', 'cli')
   .action((words: string[], opts) => {
@@ -60,6 +76,7 @@ program
         text: words.join(' '),
         type: parseType(opts.type),
         tags: parseTags(opts.tags),
+        scope: opts.scope,
         source: opts.source,
         pinned: opts.pin === true,
       });
@@ -68,6 +85,11 @@ program
           ? `${yellow('already known')} as ${memory.id}`
           : `${green('saved')} ${memory.id}`,
       );
+      if (!existing) {
+        for (const conflict of store.findConflicts(memory)) {
+          console.log(yellow(`⚠ possibly conflicts with ${conflict.id}: ${conflict.body}`));
+        }
+      }
     } catch (err) {
       fail((err as Error).message);
     } finally {
@@ -81,12 +103,14 @@ program
   .argument('<query...>')
   .option('-n, --limit <n>', 'max results', '8')
   .option('--status <status>', `filter: ${MEMORY_STATUSES.join(', ')} (default: not archived)`)
+  .option('--scope <scope>', 'search this scope plus global memories')
   .action((words: string[], opts) => {
     const store = openStore();
     printMemories(
       store.search(words.join(' '), {
         limit: Number(opts.limit) || 8,
         status: parseStatus(opts.status),
+        scope: opts.scope,
       }),
     );
     store.close();
@@ -98,6 +122,7 @@ program
   .option('--status <status>', `filter: ${MEMORY_STATUSES.join(', ')} (default: not archived)`)
   .option('-t, --type <type>', `filter: ${MEMORY_TYPES.join(', ')}`)
   .option('--tag <tag>', 'filter by tag')
+  .option('--scope <scope>', 'only memories in this exact scope')
   .option('--pinned', 'only pinned memories')
   .option('-n, --limit <n>', 'max results', '20')
   .action((opts) => {
@@ -107,6 +132,7 @@ program
         status: parseStatus(opts.status),
         type: parseType(opts.type),
         tag: opts.tag,
+        scope: opts.scope,
         pinned: opts.pinned === true ? true : undefined,
         limit: Number(opts.limit) || 20,
       }),
@@ -248,11 +274,42 @@ program
 
 program
   .command('serve')
-  .description('run the MCP server on stdio — this is what AI tools connect to')
-  .action(async () => {
+  .description('run the MCP server — stdio by default, --http for remote-capable clients')
+  .option('--scope <scope>', 'default scope for remember/recall (e.g. this project’s name)')
+  .option('--http', 'serve over token-authenticated streamable HTTP instead of stdio')
+  .option('-p, --port <n>', 'HTTP port (with --http)', '5424')
+  .option('--host <host>', 'HTTP bind address (with --http); non-loopback exposes the vault to the network', '127.0.0.1')
+  .option('--token <token>', 'HTTP bearer token (default: $ENGRAM_HTTP_TOKEN, else ~/.engram/http-token, generated on first use)')
+  .action(async (opts) => {
+    if (typeof opts.scope === 'string' && opts.scope.trim()) {
+      process.env.ENGRAM_SCOPE = opts.scope.trim();
+    }
+    const store = openStore();
+
+    if (opts.http === true) {
+      const { startHttpServer } = await import('../mcp/http.js');
+      const explicit = (opts.token as string | undefined) ?? process.env.ENGRAM_HTTP_TOKEN;
+      const token = explicit ?? loadOrCreateHttpToken(store.home);
+      const host = opts.host as string;
+      const { url } = await startHttpServer(store, {
+        token,
+        port: Number(opts.port) || 5424,
+        host,
+      });
+      console.error(`engram ${VERSION} mcp server (http) ready at ${url} (data: ${store.home})`);
+      console.error(
+        explicit
+          ? 'clients must send: Authorization: Bearer <your token>'
+          : `clients must send: Authorization: Bearer <token in ${join(store.home, 'http-token')}>`,
+      );
+      if (host !== '127.0.0.1' && host !== 'localhost' && host !== '::1') {
+        console.error(yellow('warning: bound beyond localhost — anyone with the token can read and write your memories'));
+      }
+      return;
+    }
+
     const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
     const { createEngramServer } = await import('../mcp/server.js');
-    const store = openStore();
     const server = createEngramServer(store);
     await server.connect(new StdioServerTransport());
     // stdout belongs to the MCP protocol; human-facing chatter goes to stderr.

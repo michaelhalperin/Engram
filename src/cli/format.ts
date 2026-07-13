@@ -27,6 +27,7 @@ export function memoryHeader(memory: Memory): string {
     cyan(memory.type),
   ];
   if (memory.pinned) parts.push(yellow('★'));
+  if (memory.scope) parts.push(cyan(`@${memory.scope}`));
   if (memory.supersedes) parts.push(dim(`⇒ supersedes ${memory.supersedes}`));
   if (memory.tags.length > 0) parts.push(dim(memory.tags.map((t) => `#${t}`).join(' ')));
   parts.push(dim(`(${memory.source}, ${memory.updated.slice(0, 10)})`));

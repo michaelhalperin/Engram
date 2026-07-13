@@ -15,7 +15,7 @@ const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
 process.emitWarning = originalEmitWarning;
 
 /** Bump when SCHEMA changes shape; the index is derived, so we rebuild instead of migrating. */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS memories (
@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS memories (
   source         TEXT NOT NULL,
   status         TEXT NOT NULL,
   pinned         INTEGER NOT NULL,
+  scope          TEXT NOT NULL DEFAULT '',
   created        TEXT NOT NULL,
   updated        TEXT NOT NULL,
   last_confirmed TEXT NOT NULL,
@@ -48,6 +49,7 @@ interface Row {
   source: string;
   status: string;
   pinned: number;
+  scope: string;
   created: string;
   updated: string;
   last_confirmed: string;
@@ -65,6 +67,7 @@ function rowToMemory(row: Row): Memory {
     source: row.source,
     status: row.status as Memory['status'],
     pinned: row.pinned === 1,
+    scope: row.scope || undefined,
     created: row.created,
     updated: row.updated,
     lastConfirmed: row.last_confirmed,
@@ -78,6 +81,8 @@ const DAY_MS = 86_400_000;
 const UNREVIEWED_WEIGHT = 0.85;
 /** Pinned facts are the user's declared core — boost them. */
 const PINNED_BOOST = 1.25;
+/** When recall is scoped, facts from that scope edge out equally-relevant global ones. */
+const SCOPE_BOOST = 1.15;
 /**
  * Freshness decays with time since the fact was last confirmed true, halving
  * once a year but never below the floor — old memories fade, they don't vanish.
@@ -85,14 +90,15 @@ const PINNED_BOOST = 1.25;
 const FRESHNESS_FLOOR = 0.6;
 const FRESHNESS_HALF_LIFE_DAYS = 365;
 
-/** Higher is better. Blends BM25 relevance with trust (status, pinned) and freshness. */
-function scoreHit(row: Row, now: number): number {
+/** Higher is better. Blends BM25 relevance with trust (status, pinned), freshness, and scope affinity. */
+function scoreHit(row: Row, now: number, scope?: string): number {
   const relevance = -(row.rank ?? 0); // fts5 bm25 rank: more negative = better match
   const confirmed = Date.parse(row.last_confirmed);
   const days = Number.isFinite(confirmed) ? Math.max(0, (now - confirmed) / DAY_MS) : Infinity;
   const freshness = FRESHNESS_FLOOR + (1 - FRESHNESS_FLOOR) * 2 ** (-days / FRESHNESS_HALF_LIFE_DAYS);
   const trust = (row.status === 'unreviewed' ? UNREVIEWED_WEIGHT : 1) * (row.pinned === 1 ? PINNED_BOOST : 1);
-  return relevance * trust * freshness;
+  const affinity = scope !== undefined && row.scope === scope ? SCOPE_BOOST : 1;
+  return relevance * trust * freshness * affinity;
 }
 
 /** `null` when the query contains no indexable terms. */
@@ -144,12 +150,12 @@ export class IndexDb {
   upsert(memory: Memory, hash: string, mtime: number, size: number): void {
     this.db
       .prepare(
-        `INSERT INTO memories (id, type, tags, source, status, pinned, created, updated, last_confirmed, supersedes, body, hash, mtime, size)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO memories (id, type, tags, source, status, pinned, scope, created, updated, last_confirmed, supersedes, body, hash, mtime, size)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            type = excluded.type, tags = excluded.tags, source = excluded.source,
-           status = excluded.status, pinned = excluded.pinned, created = excluded.created,
-           updated = excluded.updated, last_confirmed = excluded.last_confirmed,
+           status = excluded.status, pinned = excluded.pinned, scope = excluded.scope,
+           created = excluded.created, updated = excluded.updated, last_confirmed = excluded.last_confirmed,
            supersedes = excluded.supersedes, body = excluded.body, hash = excluded.hash,
            mtime = excluded.mtime, size = excluded.size`,
       )
@@ -160,6 +166,7 @@ export class IndexDb {
         memory.source,
         memory.status,
         memory.pinned ? 1 : 0,
+        memory.scope ?? '',
         memory.created,
         memory.updated,
         memory.lastConfirmed,
@@ -212,6 +219,10 @@ export class IndexDb {
       conditions.push('pinned = ?');
       params.push(filter.pinned ? 1 : 0);
     }
+    if (filter.scope !== undefined) {
+      conditions.push('scope = ?');
+      params.push(filter.scope);
+    }
     const limit = Math.min(filter.limit ?? 50, 500);
     const rows = this.db
       .prepare(
@@ -221,13 +232,21 @@ export class IndexDb {
     return rows.map(rowToMemory);
   }
 
-  search(query: string, opts: { limit?: number; status?: Memory['status'] } = {}): SearchHit[] {
+  search(
+    query: string,
+    opts: { limit?: number; status?: Memory['status']; scope?: string } = {},
+  ): SearchHit[] {
     const match = ftsQuery(query);
     if (!match) return [];
-    const statusCondition = opts.status ? 'm.status = ?' : "m.status != 'archived'";
+    const conditions = [opts.status ? 'm.status = ?' : "m.status != 'archived'"];
     const limit = Math.min(opts.limit ?? 8, 50);
     const params: Array<string | number> = [match];
     if (opts.status) params.push(opts.status);
+    if (opts.scope !== undefined) {
+      // Scoped recall sees the world from inside one project: its facts plus global ones.
+      conditions.push("(m.scope = '' OR m.scope = ?)");
+      params.push(opts.scope);
+    }
     // Over-fetch by BM25, then re-rank with trust and freshness in JS.
     params.push(Math.max(limit * 4, 50));
     const rows = this.db
@@ -235,14 +254,14 @@ export class IndexDb {
         `SELECT m.*, snippet(memories_fts, 1, '', '', ' … ', 18) AS snippet, rank
          FROM memories_fts
          JOIN memories m ON m.id = memories_fts.id
-         WHERE memories_fts MATCH ? AND ${statusCondition}
+         WHERE memories_fts MATCH ? AND ${conditions.join(' AND ')}
          ORDER BY rank
          LIMIT ?`,
       )
       .all(...params) as unknown as Row[];
     const now = Date.now();
     return rows
-      .map((row) => ({ row, score: scoreHit(row, now) }))
+      .map((row) => ({ row, score: scoreHit(row, now, opts.scope) }))
       .sort((a, b) => b.score - a.score)
       .slice(0, limit)
       .map(({ row }) => ({ ...rowToMemory(row), snippet: row.snippet ?? '' }));

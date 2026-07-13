@@ -1,4 +1,5 @@
 export { Store, defaultHome, type SyncResult } from './store/store.js';
+export { isPotentialConflict, overlapScore, tokenSet } from './store/conflicts.js';
 export {
   MEMORY_STATUSES,
   MEMORY_TYPES,

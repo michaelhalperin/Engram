@@ -37,6 +37,13 @@ export function makeId(text: string, createdIso: string, taken: (id: string) => 
   }
 }
 
+/** Scopes are file-safe slugs, like sources: `engram`, `acme-api`, `work.crm`. */
+export function normalizeScope(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const cleaned = raw.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  return cleaned.slice(0, 64) || undefined;
+}
+
 /** Duplicate detection ignores case and whitespace differences. */
 export function bodyHash(body: string): string {
   const normalized = body.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -86,6 +93,7 @@ export function parseMemoryFile(id: string, raw: string, fallbackIso: string): M
       ? (data.status as MemoryStatus)
       : 'active',
     pinned: data.pinned === true,
+    scope: normalizeScope(typeof data.scope === 'string' ? data.scope : undefined),
     created,
     updated: asIso(data.updated, fallbackIso),
     lastConfirmed: asIso(data.last_confirmed, created),
@@ -104,6 +112,7 @@ export function serializeMemory(memory: Memory): string {
     source: memory.source,
     status: memory.status,
     pinned: memory.pinned,
+    ...(memory.scope ? { scope: memory.scope } : {}),
     created: memory.created,
     updated: memory.updated,
     last_confirmed: memory.lastConfirmed,

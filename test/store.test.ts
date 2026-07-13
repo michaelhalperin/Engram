@@ -346,3 +346,110 @@ describe('safety rails', () => {
     expect(pinned.map((m) => m.id)).toEqual([a.memory.id]);
   });
 });
+
+describe('scopes', () => {
+  it('normalizes the scope and round-trips it through the file', () => {
+    const { memory } = store.create({
+      text: 'CI runs on GitHub Actions here',
+      source: 'cli',
+      scope: 'My Cool Repo!',
+    });
+    expect(memory.scope).toBe('my-cool-repo');
+    expect(readFileSync(store.pathFor(memory.id), 'utf8')).toContain('scope: my-cool-repo');
+    store.reindex();
+    expect(store.get(memory.id)!.scope).toBe('my-cool-repo');
+  });
+
+  it('scoped search returns global plus that scope, never other scopes', () => {
+    const global = store.create({ text: 'Standup happens every weekday', source: 'cli' });
+    const mine = store.create({ text: 'Standup notes live in Notion', source: 'cli', scope: 'acme' });
+    store.create({ text: 'Standup is async in Slack', source: 'cli', scope: 'other-repo' });
+
+    const ids = store.search('standup', { scope: 'acme' }).map((h) => h.id);
+    expect(ids).toContain(global.memory.id);
+    expect(ids).toContain(mine.memory.id);
+    expect(ids).toHaveLength(2);
+  });
+
+  it('unscoped search still sees everything', () => {
+    store.create({ text: 'Standup notes live in Notion', source: 'cli', scope: 'acme' });
+    store.create({ text: 'Standup is async in Slack', source: 'cli', scope: 'other-repo' });
+    expect(store.search('standup')).toHaveLength(2);
+  });
+
+  it('scoped facts outrank equally-relevant global ones in scoped search', () => {
+    store.create({ text: 'The database is Postgres in general', source: 'cli' });
+    const scoped = store.create({ text: 'The database is SQLite in general', source: 'cli', scope: 'engram' });
+    const hits = store.search('database general', { scope: 'engram' });
+    expect(hits[0].id).toBe(scoped.memory.id);
+  });
+
+  it('list filters by exact scope and update can clear it', () => {
+    const { memory } = store.create({ text: 'Deploy target is fly.io', source: 'cli', scope: 'acme' });
+    store.create({ text: 'Unscoped fact about deploys', source: 'cli' });
+    expect(store.list({ scope: 'acme' }).map((m) => m.id)).toEqual([memory.id]);
+
+    const cleared = store.update(memory.id, { scope: null });
+    expect(cleared.scope).toBeUndefined();
+    expect(readFileSync(store.pathFor(memory.id), 'utf8')).not.toContain('scope:');
+    expect(store.list({ scope: 'acme' })).toHaveLength(0);
+  });
+
+  it('supersede inherits the scope of the memory it corrects', () => {
+    const { memory } = store.create({ text: 'API keys rotate monthly', source: 'cli', scope: 'acme' });
+    const { memory: successor } = store.supersede(memory.id, {
+      text: 'API keys rotate weekly now',
+      source: 'mcp',
+    });
+    expect(successor.scope).toBe('acme');
+  });
+});
+
+describe('conflict detection', () => {
+  it('flags a near-identical fact with a different value', () => {
+    store.create({ text: 'Standup meeting is at 10am daily', source: 'cli' });
+    const { memory } = store.create({ text: 'Standup meeting is at 9:30am daily', source: 'mcp' });
+    const conflicts = store.findConflicts(memory);
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].body).toContain('10am');
+  });
+
+  it('does not flag unrelated facts', () => {
+    store.create({ text: 'Michael deploys with blue-green strategy on AWS', source: 'cli' });
+    const { memory } = store.create({
+      text: 'Michael prefers dark roast coffee in the morning',
+      source: 'cli',
+    });
+    expect(store.findConflicts(memory)).toHaveLength(0);
+  });
+
+  it('does not flag the memory it supersedes or archived memories', () => {
+    const { memory: old } = store.create({ text: 'Office wifi network is Skynet-5G', source: 'cli' });
+    const { memory: successor } = store.supersede(old.id, {
+      text: 'Office wifi network is Skynet-6E',
+      source: 'mcp',
+    });
+    // `old` is both the superseded predecessor and archived — neither should surface.
+    expect(store.findConflicts(successor)).toHaveLength(0);
+  });
+
+  it('facts scoped to different projects do not conflict', () => {
+    store.create({ text: 'Deploy day is Friday morning', source: 'cli', scope: 'acme' });
+    const { memory } = store.create({
+      text: 'Deploy day is Monday morning',
+      source: 'cli',
+      scope: 'other-repo',
+    });
+    expect(store.findConflicts(memory)).toHaveLength(0);
+  });
+
+  it('a scoped fact can conflict with a global one', () => {
+    store.create({ text: 'Deploy day is Friday morning', source: 'cli' });
+    const { memory } = store.create({
+      text: 'Deploy day is Monday morning',
+      source: 'cli',
+      scope: 'acme',
+    });
+    expect(store.findConflicts(memory)).toHaveLength(1);
+  });
+});

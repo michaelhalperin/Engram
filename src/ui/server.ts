@@ -88,9 +88,10 @@ export function startUi(store: Store, opts: { port?: number } = {}): Promise<UiH
         const query = url.searchParams.get('query')?.trim() ?? '';
         const status = parseStatus(url.searchParams.get('status'));
         const type = parseType(url.searchParams.get('type'));
+        const scope = url.searchParams.get('scope') ?? undefined;
         const memories = query
-          ? store.search(query, { limit: 100, status })
-          : store.list({ status, type, limit: 200 });
+          ? store.search(query, { limit: 100, status, scope })
+          : store.list({ status, type, scope, limit: 200 });
         return send(res, 200, {
           counts: store.counts(),
           inbox: store.list({ status: 'unreviewed', limit: 100 }),
@@ -110,6 +111,7 @@ export function startUi(store: Store, opts: { port?: number } = {}): Promise<UiH
           text: String(body.text ?? ''),
           type: parseType(typeof body.type === 'string' ? body.type : null),
           tags: asTags(body.tags),
+          scope: typeof body.scope === 'string' ? body.scope : undefined,
           pinned: body.pinned === true,
           source: 'ui',
         });
@@ -136,6 +138,7 @@ export function startUi(store: Store, opts: { port?: number } = {}): Promise<UiH
             tags: asTags(body.tags),
             status: parseStatus(typeof body.status === 'string' ? body.status : null),
             pinned: typeof body.pinned === 'boolean' ? body.pinned : undefined,
+            scope: typeof body.scope === 'string' || body.scope === null ? body.scope : undefined,
           });
           return send(res, 200, { memory });
         }

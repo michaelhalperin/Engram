@@ -201,6 +201,53 @@ describe('mcp server', () => {
     expect(result.isError).toBe(true);
   });
 
+  it('remember stores a normalized scope and recall honors it', async () => {
+    const saved = await client.callTool({
+      name: 'remember',
+      arguments: { text: 'This repo deploys to Fly.io', scope: 'Acme API' },
+    });
+    const id = resultText(saved).match(/Remembered as (\S+)\./)![1];
+    expect(store.get(id)!.scope).toBe('acme-api');
+    await client.callTool({
+      name: 'remember',
+      arguments: { text: 'That repo deploys to Vercel', scope: 'other-repo' },
+    });
+
+    const scoped = await client.callTool({
+      name: 'recall',
+      arguments: { query: 'deploys', scope: 'acme-api' },
+    });
+    const message = resultText(scoped);
+    expect(message).toContain('Fly.io');
+    expect(message).toContain('@acme-api');
+    expect(message).not.toContain('Vercel');
+
+    const unscoped = await client.callTool({ name: 'recall', arguments: { query: 'deploys' } });
+    expect(resultText(unscoped)).toContain('Vercel');
+  });
+
+  it('remember warns about a possible conflict and points at update', async () => {
+    await client.callTool({ name: 'remember', arguments: { text: 'Standup meeting is at 10am daily' } });
+    const second = await client.callTool({
+      name: 'remember',
+      arguments: { text: 'Standup meeting is at 9:30am daily' },
+    });
+    const message = resultText(second);
+    expect(message).toContain('Remembered as ');
+    expect(message).toContain('Possibly conflicts with');
+    expect(message).toContain('10am');
+    expect(message).toContain('call update');
+  });
+
+  it('remember without overlap stays quiet about conflicts', async () => {
+    await client.callTool({ name: 'remember', arguments: { text: 'Michael deploys with blue-green strategy' } });
+    const second = await client.callTool({
+      name: 'remember',
+      arguments: { text: 'Michael prefers dark roast coffee in the morning' },
+    });
+    expect(resultText(second)).not.toContain('conflicts');
+  });
+
   it('profile resource serves pinned memories only', async () => {
     const { memory: pinnedMemory } = store.create({
       text: 'Michael is a full-stack developer in Tel Aviv',

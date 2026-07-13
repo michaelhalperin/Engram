@@ -14,6 +14,8 @@ export interface Memory {
   status: MemoryStatus;
   /** Pinned memories form the always-loadable core profile. Pinning is a human act. */
   pinned: boolean;
+  /** Project/workspace this fact belongs to. Absent = globally true about the user. */
+  scope?: string;
   created: string;
   updated: string;
   /** Last time the fact was re-affirmed as true (created, restated, confirmed, or approved). */
@@ -34,6 +36,7 @@ export interface CreateInput {
   source: string;
   status?: MemoryStatus;
   pinned?: boolean;
+  scope?: string;
 }
 
 export interface UpdatePatch {
@@ -42,6 +45,8 @@ export interface UpdatePatch {
   tags?: string[];
   status?: MemoryStatus;
   pinned?: boolean;
+  /** New scope; `null` clears it (makes the memory global). */
+  scope?: string | null;
 }
 
 export interface ListFilter {
@@ -49,6 +54,8 @@ export interface ListFilter {
   type?: MemoryType;
   tag?: string;
   pinned?: boolean;
+  /** Exact scope match. */
+  scope?: string;
   limit?: number;
 }
 
