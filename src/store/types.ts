@@ -62,5 +62,16 @@ export interface ListFilter {
 /** One atomic fact per memory; agents that try to dump essays get told no. */
 export const MAX_BODY_BYTES = 10_000;
 
+/** Unconfirmed for longer than this and a fact counts as stale: recall flags it, the UI surfaces it. */
+export const STALE_AFTER_DAYS = 180;
+
+/** Facet counts that power filter dropdowns and the dashboard. */
+export interface Facets {
+  types: Record<string, number>;
+  sources: Record<string, number>;
+  scopes: Record<string, number>;
+  tags: Record<string, number>;
+}
+
 /** Ids double as filenames — this guard is what keeps traversal out of the vault. */
 export const VALID_ID = /^[a-z0-9][a-z0-9-]*$/;

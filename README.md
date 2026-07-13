@@ -10,7 +10,7 @@ Engram is that missing layer: a **local-first personal memory vault** that any A
 - 🔌 **Works with every MCP client.** One server, five tools (`remember`, `recall`, `confirm`, `update`, `forget`) plus a pinned `engram://profile` resource any tool can load at session start. Stdio for local tools; token-authenticated HTTP for everything that can't spawn a process.
 - 🎯 **Project scopes.** A fact can belong to a project (`scope: acme-api`). Scoped recall returns that project's facts plus your global ones — never another project's — so "when do we deploy?" means *this* repo.
 - ⚔️ **Contradiction alarms.** When an AI remembers something that overlaps an existing fact ("standup is at 9:30" vs "standup is at 10am"), Engram flags the pair — to the agent at write time, and to you in the review inbox — instead of letting both quietly coexist.
-- 👁 **You audit everything.** Agent writes land in a review inbox, attributed to the tool that wrote them. Approve, edit, or reject — `engram review` in the terminal or `engram ui` in the browser.
+- 👁 **You audit everything.** Agent writes land in a review inbox, attributed to the tool that wrote them. Approve, edit, or reject — `engram review` in the terminal or the full web app at `engram ui`.
 - 🔒 **Local first.** No cloud, no account, no telemetry. The UI and the HTTP server bind to 127.0.0.1 unless you say otherwise. Node's built-in SQLite — zero native dependencies.
 - 🛡 **Injection-aware.** Recalled memories are explicitly framed as *stored data, never instructions*, and agents can't pin anything into your always-loaded profile — pinning is a human act.
 
@@ -95,11 +95,22 @@ engram pin <id>    # promote a fact into the profile every AI loads
 | `engram pin / unpin <id>` | manage the core profile |
 | `engram confirm <id>` | mark a fact as re-verified — fresh facts rank higher |
 | `engram review` | interactive inbox for agent writes |
-| `engram ui [--port 5423]` | local web UI |
+| `engram ui [--port 5423]` | local web app (dashboard, browser, review inbox, profile) |
 | `engram serve [--scope s]` | MCP server on stdio (what AI tools run) |
 | `engram serve --http [--port 5424] [--host h] [--token t]` | MCP server over token-authenticated HTTP |
 | `engram reindex` | rebuild the search index from the files |
 | `engram doctor` | health check |
+
+## The web UI
+
+`engram ui` serves a local React app (127.0.0.1 only, same-origin guarded):
+
+- **Dashboard** — active / awaiting-review / pinned / going-stale tiles, breakdowns by type, source, and scope.
+- **Memories** — full-text search with combinable filters (status, type, scope, tag, pinned); click any card for a detail drawer with inline editing, pin/confirm/archive/delete, the supersede history chain, and conflict warnings.
+- **Review inbox** — approve / edit / reject what your AIs wrote, with contradictions flagged in place and bulk actions. Keyboard-first: `j`/`k` move, `a` approve, `r` reject, `e` edit, `x` select.
+- **Profile** — your pinned facts plus the exact `engram://profile` markdown agents receive.
+
+Hacking on it: `engram ui` in one terminal, `npm run dev:ui` in another (Vite dev server on :5173, API proxied).
 
 ## How it stores things
 

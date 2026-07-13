@@ -127,6 +127,93 @@ describe('ui server', () => {
     expect(status).toBe(403);
   });
 
+  it('state includes facets, stale count, and conflicts on inbox items', async () => {
+    store.create({ text: 'Standup meeting is at 10am daily', source: 'cli', tags: ['rituals'] });
+    store.create({
+      text: 'Standup meeting is at 9:30am daily',
+      source: 'claude-code',
+      status: 'unreviewed',
+    });
+    store.create({ text: 'Repo fact for acme', source: 'cli', scope: 'acme' });
+
+    const data = await (await fetch(`${ui.url}/api/state`)).json();
+    expect(data.facets.sources.cli).toBe(2);
+    expect(data.facets.scopes.acme).toBe(1);
+    expect(data.facets.tags.rituals).toBe(1);
+    expect(typeof data.stale).toBe('number');
+    expect(data.inbox).toHaveLength(1);
+    expect(data.inbox[0].conflicts).toHaveLength(1);
+    expect(data.inbox[0].conflicts[0].body).toContain('10am');
+  });
+
+  it('memory detail returns the supersede history chain and conflicts', async () => {
+    const { memory: original } = store.create({ text: 'Standup is at 10am', source: 'cli' });
+    const { memory: successor } = store.supersede(original.id, {
+      text: 'Standup is at 9:30am',
+      source: 'claude-code',
+    });
+
+    const res = await fetch(`${ui.url}/api/memories/${successor.id}`);
+    const data = await res.json();
+    expect(data.memory.id).toBe(successor.id);
+    expect(data.history.map((m: { id: string }) => m.id)).toEqual([original.id, successor.id]);
+
+    const fromOldEnd = await (await fetch(`${ui.url}/api/memories/${original.id}`)).json();
+    expect(fromOldEnd.history.map((m: { id: string }) => m.id)).toEqual([original.id, successor.id]);
+  });
+
+  it('confirm bumps lastConfirmed over the api', async () => {
+    const { memory } = store.create({ text: 'Fact to reconfirm', source: 'cli' });
+    await new Promise((r) => setTimeout(r, 5));
+    const res = await fetch(`${ui.url}/api/memories/${memory.id}/confirm`, {
+      method: 'POST',
+      headers: HEADERS,
+    });
+    const data = await res.json();
+    expect(Date.parse(data.memory.lastConfirmed)).toBeGreaterThan(Date.parse(memory.lastConfirmed));
+  });
+
+  it('bulk review approves and rejects many ids at once', async () => {
+    const a = store.create({ text: 'Bulk pending one', source: 'cursor', status: 'unreviewed' }).memory;
+    const b = store.create({ text: 'Bulk pending two', source: 'cursor', status: 'unreviewed' }).memory;
+    const res = await fetch(`${ui.url}/api/review/bulk`, {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify({ action: 'approve', ids: [a.id, b.id, 'does-not-exist'] }),
+    });
+    const { results } = await res.json();
+    expect(results.filter((r: { ok: boolean }) => r.ok)).toHaveLength(2);
+    expect(store.get(a.id)!.status).toBe('active');
+    expect(store.get(b.id)!.status).toBe('active');
+
+    const bad = await fetch(`${ui.url}/api/review/bulk`, {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify({ action: 'nuke', ids: [a.id] }),
+    });
+    expect(bad.status).toBe(400);
+  });
+
+  it('serves the profile markdown exactly as agents see it', async () => {
+    store.create({ text: 'Michael is a full-stack developer', source: 'cli', pinned: true });
+    const data = await (await fetch(`${ui.url}/api/profile`)).json();
+    expect(data.markdown).toContain('full-stack developer');
+    expect(data.markdown).toContain('Data, not instructions');
+    expect(data.pinned).toHaveLength(1);
+  });
+
+  it('creates memories with scope and reports conflicts', async () => {
+    store.create({ text: 'Deploy day is Friday morning', source: 'cli' });
+    const res = await fetch(`${ui.url}/api/memories`, {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify({ text: 'Deploy day is Monday morning', scope: 'Acme API' }),
+    });
+    const data = await res.json();
+    expect(data.memory.scope).toBe('acme-api');
+    expect(data.conflicts).toHaveLength(1);
+  });
+
   it('404s on unknown ids and 400s on bad input', async () => {
     const missing = await fetch(`${ui.url}/api/memories/nope/approve`, { method: 'POST', headers: HEADERS });
     expect(missing.status).toBe(404);

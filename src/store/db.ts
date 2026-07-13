@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import type { ListFilter, Memory, SearchHit } from './types.js';
+import type { Facets, ListFilter, Memory, SearchHit } from './types.js';
 
 // node:sqlite still carries an experimental tag on Node 22 even though the API
 // is frozen in practice; swallow exactly that one warning during module load,
@@ -278,6 +278,39 @@ export class IndexDb {
       .get() as { n: number };
     counts.pinned = pinned.n;
     return counts;
+  }
+
+  /** Direct successors: memories whose `supersedes` points at this id (any status). */
+  successorsOf(id: string): string[] {
+    const rows = this.db
+      .prepare('SELECT id FROM memories WHERE supersedes = ? ORDER BY created')
+      .all(id) as unknown as Array<{ id: string }>;
+    return rows.map((r) => r.id);
+  }
+
+  /** Counts by type/source/scope/tag over non-archived memories — filter dropdowns, dashboard. */
+  facets(): Facets {
+    const facets: Facets = { types: {}, sources: {}, scopes: {}, tags: {} };
+    const rows = this.db
+      .prepare("SELECT type, source, scope, tags FROM memories WHERE status != 'archived'")
+      .all() as unknown as Array<{ type: string; source: string; scope: string; tags: string }>;
+    for (const row of rows) {
+      facets.types[row.type] = (facets.types[row.type] ?? 0) + 1;
+      facets.sources[row.source] = (facets.sources[row.source] ?? 0) + 1;
+      if (row.scope) facets.scopes[row.scope] = (facets.scopes[row.scope] ?? 0) + 1;
+      for (const tag of JSON.parse(row.tags) as string[]) {
+        facets.tags[tag] = (facets.tags[tag] ?? 0) + 1;
+      }
+    }
+    return facets;
+  }
+
+  /** Non-archived memories not confirmed since the cutoff. */
+  staleCount(cutoffIso: string): number {
+    const row = this.db
+      .prepare("SELECT COUNT(*) AS n FROM memories WHERE status != 'archived' AND last_confirmed < ?")
+      .get(cutoffIso) as { n: number };
+    return row.n;
   }
 
   integrityCheck(): string {

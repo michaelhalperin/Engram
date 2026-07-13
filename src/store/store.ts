@@ -15,8 +15,10 @@ import { IndexDb } from './db.js';
 import { bodyHash, makeId, normalizeScope, parseMemoryFile, serializeMemory } from './files.js';
 import {
   MAX_BODY_BYTES,
+  STALE_AFTER_DAYS,
   VALID_ID,
   type CreateInput,
+  type Facets,
   type ListFilter,
   type Memory,
   type SearchHit,
@@ -291,6 +293,53 @@ export class Store {
   counts(): Record<Memory['status'] | 'pinned', number> {
     this.maybeSync();
     return this.db.counts();
+  }
+
+  facets(): Facets {
+    this.maybeSync();
+    return this.db.facets();
+  }
+
+  /** Non-archived memories whose facts have not been re-affirmed in STALE_AFTER_DAYS. */
+  staleCount(): number {
+    this.maybeSync();
+    const cutoff = new Date(Date.now() - STALE_AFTER_DAYS * 86_400_000).toISOString();
+    return this.db.staleCount(cutoff);
+  }
+
+  /**
+   * The full correction chain a memory belongs to, oldest first: predecessors
+   * via `supersedes` links, then the memory, then successors. Chains are
+   * effectively linear (supersede archives the old fact), so branches are
+   * flattened in creation order.
+   */
+  history(id: string): Memory[] {
+    const memory = this.get(id);
+    if (!memory) throw new Error(`no memory with id ${JSON.stringify(id)}`);
+    const seen = new Set<string>([memory.id]);
+    const before: Memory[] = [];
+    let cursor = memory;
+    while (cursor.supersedes && !seen.has(cursor.supersedes)) {
+      const predecessor = this.get(cursor.supersedes);
+      if (!predecessor) break;
+      seen.add(predecessor.id);
+      before.unshift(predecessor);
+      cursor = predecessor;
+    }
+    const after: Memory[] = [];
+    const queue = [memory.id];
+    while (queue.length > 0) {
+      const nextIds = this.db.successorsOf(queue.shift()!);
+      for (const nextId of nextIds) {
+        if (seen.has(nextId)) continue;
+        seen.add(nextId);
+        const successor = this.get(nextId);
+        if (!successor) continue;
+        after.push(successor);
+        queue.push(nextId);
+      }
+    }
+    return [...before, memory, ...after];
   }
 
   integrityCheck(): string {
