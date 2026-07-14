@@ -24,7 +24,7 @@ Engram is that missing layer: a **local-first personal memory vault** that any A
 Requires Node ≥ 22.5.
 
 ```sh
-npm install -g @michaelhalperin/engram
+npm install -g @michael-halperin/engram
 
 # tell it something
 engram add "I prefer TypeScript for new projects" -t preference --pin
