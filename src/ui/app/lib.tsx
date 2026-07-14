@@ -34,6 +34,10 @@ export function isLandingRoute(route: string[]): boolean {
   return root === '' || root === 'landing';
 }
 
+export function isHelpRoute(route: string[]): boolean {
+  return route[0] === 'help';
+}
+
 export function isVaultRoute(route: string[]): boolean {
   return route[0] === 'vault';
 }

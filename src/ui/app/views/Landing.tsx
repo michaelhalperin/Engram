@@ -444,9 +444,17 @@ export function Landing() {
         <a className="lp-brand" href="#/">
           <EngramLogo className="lp-brand-lockup" markClassName="lp-brand-mark" textClassName="lp-brand-text" />
         </a>
-        <a className="lp-enter" href="#/vault">
-          Open vault
-        </a>
+        <nav className="lp-bar-nav" aria-label="Site">
+          <a className="lp-nav-link lp-nav-active" href="#/" aria-current="page">
+            Home
+          </a>
+          <a className="lp-nav-link" href="#/help">
+            Help
+          </a>
+          <a className="lp-enter" href="#/vault">
+            Open vault
+          </a>
+        </nav>
       </header>
 
       <section className="lp-hero">

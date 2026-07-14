@@ -4,6 +4,7 @@ import {
   AppProvider,
   applyTheme,
   cycleTheme,
+  isHelpRoute,
   isLandingRoute,
   isVaultRoute,
   legacyRouteTarget,
@@ -15,6 +16,7 @@ import {
 import { EngramLogo } from './logo';
 import { AddMemory } from './views/AddMemory';
 import { Dashboard } from './views/Dashboard';
+import { Help } from './views/Help';
 import { Inbox } from './views/Inbox';
 import { Landing } from './views/Landing';
 import { Memories } from './views/Memories';
@@ -82,9 +84,14 @@ function VaultShell() {
             New memory
           </button>
           <div className="v-rail-meta">
-            <a className="v-link-quiet" href="#/">
-              Docs / landing
-            </a>
+            <div className="v-rail-links">
+              <a className="v-link-quiet" href="#/help">
+                Help
+              </a>
+              <a className="v-link-quiet" href="#/">
+                Landing
+              </a>
+            </div>
             <button className="v-btn v-btn-ghost v-btn-sm" onClick={toggleTheme} aria-label="Cycle theme">
               {themeLabel(theme)}
             </button>
@@ -123,6 +130,15 @@ function Router() {
     return (
       <>
         <Landing />
+        <Toasts />
+      </>
+    );
+  }
+
+  if (isHelpRoute(route)) {
+    return (
+      <>
+        <Help />
         <Toasts />
       </>
     );

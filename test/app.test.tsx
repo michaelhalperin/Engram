@@ -119,6 +119,15 @@ describe('web app', () => {
     expect(window.location.hash === '' || window.location.hash === '#/').toBe(true);
   });
 
+  it('routes to the help command reference', async () => {
+    window.location.hash = '#/help';
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Commands' })).toBeTruthy());
+    expect(screen.getByText('engram add <text…>')).toBeTruthy();
+    expect(screen.getByText('remember')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Help', current: 'page' })).toBeTruthy();
+  });
+
   it('routes to the review inbox via the hash', async () => {
     window.location.hash = '#/vault/inbox';
     render(<App />);
