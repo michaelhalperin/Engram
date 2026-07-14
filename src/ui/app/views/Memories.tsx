@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getState } from '../api';
-import { EmptyState, FilterChips, MemoryCard, PageHeader } from '../components';
+import { Checkbox, EmptyState, FilterChips, MemoryCard, PageHeader, Select } from '../components';
 import { useApp } from '../lib';
 import { MEMORY_STATUSES, MEMORY_TYPES, type StateQuery, type UiMemory } from '../types';
 
@@ -85,66 +85,53 @@ export function Memories({ onOpen }: { onOpen: (id: string) => void }) {
           aria-label="Search memories"
         />
         <div className="v-filter-grid">
-          <select
-            className="v-input"
-            value={filters.status ?? ''}
-            onChange={(e) => set({ status: e.target.value || undefined })}
+          <Select
             aria-label="Filter by status"
-          >
-            <option value="">any status</option>
-            {MEMORY_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <select
-            className="v-input"
-            value={filters.type ?? ''}
-            onChange={(e) => set({ type: e.target.value || undefined })}
+            value={filters.status ?? ''}
+            onChange={(v) => set({ status: v || undefined })}
+            options={[
+              { value: '', label: 'any status' },
+              ...MEMORY_STATUSES.map((s) => ({ value: s, label: s })),
+            ]}
+          />
+          <Select
             aria-label="Filter by type"
-          >
-            <option value="">any type</option>
-            {MEMORY_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          <select
-            className="v-input"
-            value={filters.scope ?? ''}
-            onChange={(e) => set({ scope: e.target.value || undefined })}
+            value={filters.type ?? ''}
+            onChange={(v) => set({ type: v || undefined })}
+            options={[
+              { value: '', label: 'any type' },
+              ...MEMORY_TYPES.map((t) => ({ value: t, label: t })),
+            ]}
+          />
+          <Select
             aria-label="Filter by scope"
-          >
-            <option value="">any scope</option>
-            {Object.keys(facets?.scopes ?? {}).sort().map((s) => (
-              <option key={s} value={s}>
-                @{s}
-              </option>
-            ))}
-          </select>
-          <select
-            className="v-input"
-            value={filters.tag ?? ''}
-            onChange={(e) => set({ tag: e.target.value || undefined })}
+            value={filters.scope ?? ''}
+            onChange={(v) => set({ scope: v || undefined })}
+            options={[
+              { value: '', label: 'any scope' },
+              ...Object.keys(facets?.scopes ?? {})
+                .sort()
+                .map((s) => ({ value: s, label: `@${s}` })),
+            ]}
+          />
+          <Select
             aria-label="Filter by tag"
+            value={filters.tag ?? ''}
+            onChange={(v) => set({ tag: v || undefined })}
+            options={[
+              { value: '', label: 'any tag' },
+              ...Object.keys(facets?.tags ?? {})
+                .sort()
+                .map((t) => ({ value: t, label: `#${t}` })),
+            ]}
+          />
+          <Checkbox
+            checked={filters.pinned ?? false}
+            onChange={(on) => set({ pinned: on || undefined })}
+            aria-label="Pinned only"
           >
-            <option value="">any tag</option>
-            {Object.keys(facets?.tags ?? {}).sort().map((t) => (
-              <option key={t} value={t}>
-                #{t}
-              </option>
-            ))}
-          </select>
-          <label className="v-check-label">
-            <input
-              type="checkbox"
-              checked={filters.pinned ?? false}
-              onChange={(e) => set({ pinned: e.target.checked || undefined })}
-            />
             pinned only
-          </label>
+          </Checkbox>
         </div>
       </div>
 

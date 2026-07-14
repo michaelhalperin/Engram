@@ -1370,6 +1370,84 @@ button { font: inherit; cursor: pointer; }
   white-space: nowrap;
 }
 
+.v-check-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: stretch;
+  background: var(--v-panel);
+  color: var(--v-muted);
+  border: 1px solid var(--v-border);
+  border-radius: var(--v-radius);
+  padding: 8px 12px 8px 10px;
+  font-family: var(--v-mono);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.v-check-control:hover {
+  border-color: var(--v-border-strong);
+  color: var(--v-text);
+}
+
+.v-check-control:has(.v-check-input:focus-visible) {
+  outline: none;
+  border-color: var(--v-accent);
+  box-shadow: 0 0 0 2px var(--v-accent-soft);
+}
+
+.v-check-control-on {
+  color: var(--v-accent);
+  border-color: color-mix(in srgb, var(--v-accent) 40%, var(--v-border));
+  background: var(--v-accent-soft);
+}
+
+.v-check-control-on:hover {
+  color: var(--v-accent);
+  border-color: var(--v-accent);
+}
+
+.v-check-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.v-check-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border: 1px solid var(--v-border-strong);
+  border-radius: 2px;
+  background: var(--v-surface);
+  color: transparent;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.v-check-box svg {
+  width: 10px;
+  height: 10px;
+}
+
+.v-check-control-on .v-check-box {
+  background: var(--v-accent);
+  border-color: var(--v-accent);
+  color: var(--v-panel);
+}
+
+.v-check-text {
+  line-height: 1;
+}
+
 .v-text-link {
   background: none;
   border: none;
@@ -1704,6 +1782,7 @@ button { font: inherit; cursor: pointer; }
   border-radius: var(--v-radius);
   padding: 14px;
   margin-bottom: 12px;
+  overflow: visible;
 }
 
 .v-filter-grid {
@@ -1713,7 +1792,136 @@ button { font: inherit; cursor: pointer; }
   margin-top: 10px;
 }
 
-.v-filter-grid .v-input { width: auto; min-width: 120px; flex: 1; }
+.v-filter-grid .v-input,
+.v-filter-grid .v-select { width: auto; min-width: 140px; flex: 1; }
+.v-filter-grid .v-check-control { flex: 0 0 auto; }
+
+/* custom select */
+.v-select {
+  position: relative;
+  min-width: 0;
+}
+
+.v-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  background: var(--v-panel);
+  color: var(--v-text);
+  border: 1px solid var(--v-border);
+  border-radius: var(--v-radius);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-family: var(--v-mono);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.v-select-trigger:hover {
+  border-color: var(--v-border-strong);
+}
+
+.v-select-trigger:focus-visible,
+.v-select-open .v-select-trigger {
+  outline: none;
+  border-color: var(--v-accent);
+  box-shadow: 0 0 0 2px var(--v-accent-soft);
+}
+
+.v-select-placeholder .v-select-value {
+  color: var(--v-muted);
+}
+
+.v-select-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.v-select-chevron {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--v-muted);
+  transition: transform 160ms ease;
+}
+
+.v-select-open .v-select-chevron {
+  transform: rotate(180deg);
+  color: var(--v-accent);
+}
+
+.v-select-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 100%;
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--v-panel);
+  border: 1px solid var(--v-border-strong);
+  border-radius: var(--v-radius);
+  box-shadow:
+    0 1px 0 rgba(15, 20, 25, 0.04),
+    0 10px 28px rgba(15, 20, 25, 0.12);
+  animation: v-select-in 120ms ease-out;
+}
+
+:root[data-theme='dark'] .v-select-menu {
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.35),
+    0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+.v-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: calc(var(--v-radius) - 1px);
+  font-family: var(--v-mono);
+  font-size: 12px;
+  color: var(--v-text);
+  cursor: pointer;
+}
+
+.v-select-option-active {
+  background: var(--v-accent-soft);
+  color: var(--v-accent);
+}
+
+.v-select-option-selected {
+  font-weight: 600;
+}
+
+.v-select-check {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--v-accent);
+}
+
+@keyframes v-select-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 .v-chips {
   display: flex;
