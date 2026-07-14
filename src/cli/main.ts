@@ -404,6 +404,43 @@ program
     console.error(`engram ${VERSION} mcp server ready (data: ${store.home})`);
   });
 
+program
+  .command('install')
+  .description('wire engram into an AI tool (currently: claude-code)')
+  .argument('<tool>', 'claude-code')
+  .option('--remove', 'remove the integration instead')
+  .option('--settings <path>', 'settings file to edit (default: ~/.claude/settings.json)')
+  .action(async (tool: string, opts: { remove?: boolean; settings?: string }) => {
+    if (tool !== 'claude-code') {
+      fail(`unknown tool ${JSON.stringify(tool)} — currently supported: claude-code`);
+    }
+    const { installClaudeCodeHook, removeClaudeCodeHook } = await import('./install.js');
+    const { homedir } = await import('node:os');
+    const settingsPath = opts.settings ?? join(homedir(), '.claude', 'settings.json');
+    try {
+      const result =
+        opts.remove === true ? removeClaudeCodeHook(settingsPath) : installClaudeCodeHook(settingsPath);
+      switch (result) {
+        case 'installed':
+          console.log(`${green('✓')} SessionStart hook added to ${settingsPath}`);
+          console.log('new Claude Code sessions now start with your profile + the repo’s facts in context');
+          console.log(dim('for recall/remember during the session, also run: claude mcp add engram -- engram serve'));
+          break;
+        case 'already-installed':
+          console.log(`already installed in ${settingsPath} — nothing to do`);
+          break;
+        case 'removed':
+          console.log(`${green('✓')} SessionStart hook removed from ${settingsPath}`);
+          break;
+        case 'not-installed':
+          console.log(`no engram hook in ${settingsPath} — nothing to remove`);
+          break;
+      }
+    } catch (err) {
+      fail((err as Error).message);
+    }
+  });
+
 const hookCmd = program
   .command('hook')
   .description('endpoints AI tools call into — wired up by `engram install`');
