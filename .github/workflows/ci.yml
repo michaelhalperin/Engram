@@ -14,9 +14,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # Optional deps skipped: the embedding runtime is ~300 MB and tests use
-      # fake embedders — CI also proves engram works without it.
-      - run: npm ci --omit=optional
+      # Full install: --omit=optional would also drop the build toolchain's
+      # platform binaries (rolldown/esbuild ship them as optional deps).
+      # The no-embedder degradation path is covered by tests via ENGRAM_NO_EMBED.
+      - run: npm ci
       - run: npx tsc -p tsconfig.json --noEmit
       - run: npx tsc -p src/ui/app/tsconfig.json --noEmit
       - run: npm test
