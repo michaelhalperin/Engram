@@ -1,6 +1,7 @@
 export { Store, defaultHome, type SyncResult } from './store/store.js';
 export { isPotentialConflict, overlapScore, tokenSet } from './store/conflicts.js';
 export { renderProfile } from './store/profile.js';
+export { renderSessionContext, scopeForDirectory } from './store/session.js';
 export {
   MEMORY_STATUSES,
   MEMORY_TYPES,

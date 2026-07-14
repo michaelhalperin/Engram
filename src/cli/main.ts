@@ -404,6 +404,58 @@ program
     console.error(`engram ${VERSION} mcp server ready (data: ${store.home})`);
   });
 
+const hookCmd = program
+  .command('hook')
+  .description('endpoints AI tools call into — wired up by `engram install`');
+
+hookCmd
+  .command('session-start')
+  .description('print profile + current project facts for injection at session start')
+  .action(async () => {
+    // A memory hiccup must never break the user's session: on any failure,
+    // print nothing and exit 0.
+    try {
+      const payload = await readStdinWithTimeout();
+      let cwd = process.cwd();
+      try {
+        const parsed = JSON.parse(payload) as { cwd?: unknown };
+        if (typeof parsed.cwd === 'string' && parsed.cwd) cwd = parsed.cwd;
+      } catch {
+        // No or malformed hook payload (e.g. run by hand) — use the real cwd.
+      }
+      const { renderSessionContext, scopeForDirectory } = await import('../store/session.js');
+      const store = openStore();
+      try {
+        const context = renderSessionContext(store, scopeForDirectory(cwd));
+        if (context) process.stdout.write(`${context}\n`);
+      } finally {
+        store.close();
+      }
+    } catch {
+      process.exitCode = 0;
+    }
+  });
+
+/** Hook payloads arrive on stdin; never hang waiting for one that isn't coming. */
+function readStdinWithTimeout(timeoutMs = 800): Promise<string> {
+  if (process.stdin.isTTY) return Promise.resolve('');
+  return new Promise((resolve) => {
+    let data = '';
+    const finish = (): void => {
+      clearTimeout(timer);
+      process.stdin.destroy();
+      resolve(data);
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => {
+      data += chunk;
+    });
+    process.stdin.once('end', finish);
+    process.stdin.once('error', finish);
+  });
+}
+
 program
   .command('doctor')
   .description('check that engram is healthy on this machine')
