@@ -23,5 +23,7 @@ export {
   type ImportedFact,
 } from './import/core.js';
 export { parseFactLines } from './import/text.js';
+export { extractChatgptFacts } from './import/chatgpt.js';
+export { listZipEntries, unzipEntry } from './import/zip.js';
 export { extractMarkdownNotes } from './import/markdown.js';
 export { VERSION } from './version.js';

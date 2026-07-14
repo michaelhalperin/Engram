@@ -151,6 +151,18 @@ withImportOptions(
 
 withImportOptions(
   importCmd
+    .command('chatgpt')
+    .description("a ChatGPT data export (.zip, unzipped folder, or conversations.json) or a pasted 'Manage memories' list (.txt)")
+    .argument('<path>'),
+).action((path: string, opts: ImportCliOpts) =>
+  executeImport('import:chatgpt', opts, async () => {
+    const { extractChatgptFacts } = await import('../import/chatgpt.js');
+    return extractChatgptFacts(path);
+  }),
+);
+
+withImportOptions(
+  importCmd
     .command('markdown')
     .description('a folder of markdown notes (Obsidian-style) — one note per memory')
     .argument('<dir>'),
