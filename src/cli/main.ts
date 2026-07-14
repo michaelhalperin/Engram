@@ -187,19 +187,22 @@ withImportOptions(
 
 program
   .command('search')
-  .description('full-text search across memories')
+  .description('search memories by meaning and keywords (semantic after `engram embed`, keyword otherwise)')
   .argument('<query...>')
   .option('-n, --limit <n>', 'max results', '8')
   .option('--status <status>', `filter: ${MEMORY_STATUSES.join(', ')} (default: not archived)`)
   .option('--scope <scope>', 'search this scope plus global memories')
-  .action((words: string[], opts) => {
+  .option('--keyword', 'BM25 keyword matching only — skips loading the embedding model')
+  .action(async (words: string[], opts) => {
     const store = openStore();
+    const query = words.join(' ');
+    const searchOpts = {
+      limit: Number(opts.limit) || 8,
+      status: parseStatus(opts.status),
+      scope: opts.scope as string | undefined,
+    };
     printMemories(
-      store.search(words.join(' '), {
-        limit: Number(opts.limit) || 8,
-        status: parseStatus(opts.status),
-        scope: opts.scope,
-      }),
+      opts.keyword === true ? store.search(query, searchOpts) : await store.recall(query, searchOpts),
     );
     store.close();
   });

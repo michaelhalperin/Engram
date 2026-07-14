@@ -134,6 +134,57 @@ describe('semantic search', () => {
   });
 });
 
+describe('hybrid recall', () => {
+  it('finds paraphrases keyword search misses, and fuses when both agree', async () => {
+    store.attachEmbedder(
+      fakeEmbedder({
+        'michael prefers vim keybindings everywhere.': [0.9, 0.1, 0],
+        'michael uses an editor config from 2019.': [0.8, 0.2, 0],
+        'deploys happen on fridays.': [0, 0, 1],
+        'which editor does he use': [1, 0, 0],
+      }),
+    );
+    store.create({ text: 'Michael prefers vim keybindings everywhere.', source: 'cli' });
+    store.create({ text: 'Michael uses an editor config from 2019.', source: 'cli' });
+    store.create({ text: 'Deploys happen on Fridays.', source: 'cli' });
+    await store.embedIndex();
+
+    const hits = await store.recall('which editor does he use');
+    // "editor config" matches by keyword AND meaning — fusion puts it first;
+    // the vim fact arrives on meaning alone, which keyword search alone missed.
+    expect(hits[0].body).toContain('editor config');
+    expect(hits.map((h) => h.body)).toContain('Michael prefers vim keybindings everywhere.');
+    expect(hits.map((h) => h.body)).not.toContain('Deploys happen on Fridays.');
+    expect(hits.find((h) => h.body.includes('vim'))!.snippet).toContain('vim');
+  });
+
+  it('is plain keyword search when no embedder is available', async () => {
+    process.env.ENGRAM_NO_EMBED = '1';
+    try {
+      store.create({ text: 'Deploys happen on Fridays.', source: 'cli' });
+      const hits = await store.recall('deploys');
+      expect(hits).toHaveLength(1);
+      expect(await store.recall('which editor')).toHaveLength(0);
+    } finally {
+      delete process.env.ENGRAM_NO_EMBED;
+    }
+  });
+
+  it('embeds fresh writes on the fly — recall sees a fact saved a moment ago', async () => {
+    store.attachEmbedder(
+      fakeEmbedder({
+        'biscuit is allergic to chicken.': [1, 0],
+        'what can the dog not eat': [0.95, 0.31],
+      }),
+    );
+    await store.embedIndex();
+    store.create({ text: 'Biscuit is allergic to chicken.', source: 'cli' });
+    const hits = await store.recall('what can the dog not eat');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].body).toContain('allergic');
+  });
+});
+
 describe('neighbors and similarity', () => {
   it('reads stored vectors without re-embedding', async () => {
     store.attachEmbedder(

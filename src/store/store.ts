@@ -305,6 +305,47 @@ export class Store {
   }
 
   /**
+   * Hybrid recall: BM25 and semantic rankings fused by reciprocal rank (a fact
+   * found by both beats a fact found by one). Falls back to pure keyword
+   * search when no local model is available — recall never fails because
+   * semantics did.
+   */
+  async recall(
+    query: string,
+    opts: { limit?: number; status?: Memory['status']; scope?: string } = {},
+  ): Promise<SearchHit[]> {
+    const limit = opts.limit ?? 8;
+    const scope = normalizeScope(opts.scope);
+    const fetch = Math.max(limit * 2, 16);
+    const keyword = this.search(query, { ...opts, limit: fetch });
+    let semantic: { memory: Memory }[] = [];
+    try {
+      const semantics = await this.semantics();
+      if (semantics) {
+        await semantics.ensureFresh();
+        semantic = await semantics.search(query, { limit: fetch, status: opts.status, scope });
+      }
+    } catch {
+      // A broken model must not break recall; keyword results stand alone.
+    }
+    if (semantic.length === 0) return keyword.slice(0, limit);
+
+    const RRF_K = 60;
+    const fused = new Map<string, { hit: SearchHit; score: number }>();
+    keyword.forEach((hit, rank) => fused.set(hit.id, { hit, score: 1 / (RRF_K + rank + 1) }));
+    semantic.forEach(({ memory }, rank) => {
+      const score = 1 / (RRF_K + rank + 1);
+      const entry = fused.get(memory.id);
+      if (entry) entry.score += score;
+      else fused.set(memory.id, { hit: { ...memory, snippet: leadSnippet(memory.body) }, score });
+    });
+    return [...fused.values()]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map((entry) => entry.hit);
+  }
+
+  /**
    * Existing non-archived memories that plausibly contradict this one: they
    * share most of their informative words but say something different. Purely
    * heuristic — callers should present these as "possibly conflicts with" and
@@ -405,6 +446,12 @@ export class Store {
     const stat = statSync(path);
     this.db.upsert(memory, bodyHash(memory.body), Math.floor(stat.mtimeMs), stat.size);
   }
+}
+
+/** Semantic hits have no FTS match to excerpt; the fact's opening line stands in. */
+function leadSnippet(body: string, max = 140): string {
+  const flat = body.replace(/\s+/g, ' ').trim();
+  return flat.length > max ? `${flat.slice(0, max - 2)} …` : flat;
 }
 
 function parseIso(value: string | undefined): string | undefined {

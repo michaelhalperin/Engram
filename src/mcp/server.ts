@@ -137,7 +137,7 @@ export function createEngramServer(store: Store): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ query, limit, scope }) => {
-      const hits = store.search(query, { limit: limit ?? 8, scope: effectiveScope(scope) });
+      const hits = await store.recall(query, { limit: limit ?? 8, scope: effectiveScope(scope) });
       if (hits.length === 0) {
         return text(`No memories matched ${JSON.stringify(query)}. Try broader or different words.`);
       }
