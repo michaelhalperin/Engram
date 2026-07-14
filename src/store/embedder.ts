@@ -35,9 +35,12 @@ export async function loadEmbedder(
   if (process.env.ENGRAM_NO_EMBED === '1') {
     return { reason: 'semantic search is disabled (ENGRAM_NO_EMBED=1)' };
   }
-  let transformers: typeof import('@huggingface/transformers');
+  let transformers: TransformersModule;
   try {
-    transformers = await import('@huggingface/transformers');
+    // Non-literal specifier: the optional dependency must not be needed to
+    // typecheck or build this package, only to run semantic features.
+    const specifier = '@huggingface/transformers';
+    transformers = (await import(specifier)) as TransformersModule;
   } catch {
     return {
       reason:
@@ -58,6 +61,12 @@ export async function loadEmbedder(
         : `model ${model} is not downloaded yet — run \`engram embed\` once (~25 MB, then fully offline)`,
     };
   }
+}
+
+/** The slice of @huggingface/transformers we touch, typed structurally. */
+interface TransformersModule {
+  env: { cacheDir: string; allowRemoteModels: boolean };
+  pipeline(task: 'feature-extraction', model: string, opts: { dtype: string }): Promise<unknown>;
 }
 
 type FeatureExtraction = (

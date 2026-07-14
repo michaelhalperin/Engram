@@ -1,6 +1,6 @@
 {
   "name": "@michaelhalperin/engram",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "One memory. Every AI. Yours. A local-first, user-owned memory vault your AI tools plug into over MCP.",
   "keywords": [
     "mcp",

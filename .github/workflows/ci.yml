@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Optional deps skipped: the embedding runtime is ~300 MB and tests use
+      # fake embedders — CI also proves engram works without it.
+      - run: npm ci --omit=optional
+      - run: npx tsc -p tsconfig.json --noEmit
+      - run: npx tsc -p src/ui/app/tsconfig.json --noEmit
+      - run: npm test
+      - run: npm run build
