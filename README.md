@@ -75,6 +75,21 @@ engram search deploys --scope acme-api   # acme-api's facts + global ones, nothi
 
 Scoped recall ranks the project's own facts slightly above global ones; unscoped recall still searches everything. Facts scoped to *different* projects never shadow each other — "standup is at 10" can be true in one repo and false in another.
 
+## Bring your memory with you
+
+Your AIs already know things about you — they're just siloed. Imports pull them in; everything lands **unreviewed** in the inbox, so `engram review` is where you decide what stays. Re-running an import never duplicates: facts already in the vault are matched and skipped.
+
+```sh
+engram import chatgpt ~/Downloads/chatgpt-export.zip   # or the unzipped folder
+engram import claude                                   # scans ~/.claude/projects
+engram import markdown ~/notes                         # one note = one memory
+engram import text memories.txt                        # one fact per line
+```
+
+- **ChatGPT** doesn't export memory as a list, but every save is on the record: an assistant message to its `bio` tool inside the export's `conversations.json`. Engram mines exactly those, keeping their original dates. (Pasting Settings → Personalization → *Manage memories* into a `.txt` works too, and is quicker than requesting a full export.)
+- **Claude Code** keeps per-project memory as markdown files under `~/.claude/projects/*/memory/` — imported directly, scoped by project, with Claude's memory types mapped onto Engram's. A pasted claude.ai memory summary imports as `.txt`.
+- Every subcommand takes `--dry-run` (preview, write nothing), `--scope`, `--tags`, and `--type`. Imported facts keep their original timestamps, so ancient ones start out stale — reviewing is what refreshes them. Contradictions with what's already in the vault are flagged at import time.
+
 ## The daily loop
 
 ```sh
@@ -94,6 +109,7 @@ engram pin <id>    # promote a fact into the profile every AI loads
 | `engram show / edit / rm [--hard] <id>` | inspect, open in `$EDITOR`, archive or delete |
 | `engram pin / unpin <id>` | manage the core profile |
 | `engram confirm <id>` | mark a fact as re-verified — fresh facts rank higher |
+| `engram import chatgpt/claude/markdown/text <path>` | pull memories in from other tools (`--dry-run` to preview) |
 | `engram review` | interactive inbox for agent writes |
 | `engram ui [--port 5423]` | local web app (dashboard, browser, review inbox, profile) |
 | `engram serve [--scope s]` | MCP server on stdio (what AI tools run) |
@@ -143,7 +159,8 @@ Michael prefers TypeScript for new projects.
 
 ## Roadmap
 
-- Importers: ChatGPT memory export, Claude memory, markdown notes
+- ~~Importers: ChatGPT memory export, Claude memory, markdown notes~~ ✓ `engram import`
+- Auto-inject: a Claude Code hook that loads your profile at session start — memory that works even when the model forgets to ask
 - Optional embeddings for semantic recall (pluggable, still local)
 - Dedupe/merge suggestions for near-duplicate memories
 
