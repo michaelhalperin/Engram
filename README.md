@@ -30,7 +30,8 @@ engram add "I prefer TypeScript for new projects" -t preference --pin
 **Claude Code**
 
 ```sh
-claude mcp add engram -- engram serve
+claude mcp add engram -- engram serve   # recall/remember tools during the session
+engram install claude-code             # auto-inject: profile + repo facts at session start
 ```
 
 **Claude Desktop** — add to `claude_desktop_config.json`:
@@ -90,6 +91,19 @@ engram import text memories.txt                        # one fact per line
 - **Claude Code** keeps per-project memory as markdown files under `~/.claude/projects/*/memory/` — imported directly, scoped by project, with Claude's memory types mapped onto Engram's. A pasted claude.ai memory summary imports as `.txt`.
 - Every subcommand takes `--dry-run` (preview, write nothing), `--scope`, `--tags`, and `--type`. Imported facts keep their original timestamps, so ancient ones start out stale — reviewing is what refreshes them. Contradictions with what's already in the vault are flagged at import time.
 
+## Auto-inject: memory that works without being asked
+
+MCP tools have a failure mode: the model has to *think* to call `recall`, and often it doesn't. `engram install claude-code` fixes that with a [SessionStart hook](https://docs.anthropic.com/en/docs/claude-code/hooks) — every new Claude Code session begins with your pinned profile **plus the current repository's facts** (scope derived from the repo name) already in context, no tool call required.
+
+The injected block is framed as stored data, never instructions; unreviewed and stale facts are marked so the model hedges instead of asserting. The hook is deliberately unbreakable: on any failure it prints nothing and exits 0 — a memory hiccup never costs you a session. An empty vault injects nothing at all.
+
+```sh
+engram install claude-code            # adds the hook to ~/.claude/settings.json, touching nothing else
+engram install claude-code --remove   # takes it back out
+```
+
+Injection covers session start; keep the MCP server configured too so the model can search deeper mid-session and save new facts.
+
 ## The daily loop
 
 ```sh
@@ -110,6 +124,7 @@ engram pin <id>    # promote a fact into the profile every AI loads
 | `engram pin / unpin <id>` | manage the core profile |
 | `engram confirm <id>` | mark a fact as re-verified — fresh facts rank higher |
 | `engram import chatgpt/claude/markdown/text <path>` | pull memories in from other tools (`--dry-run` to preview) |
+| `engram install claude-code [--remove]` | wire up the session-start auto-inject hook |
 | `engram review` | interactive inbox for agent writes |
 | `engram ui [--port 5423]` | local web app (dashboard, browser, review inbox, profile) |
 | `engram serve [--scope s]` | MCP server on stdio (what AI tools run) |
@@ -160,7 +175,7 @@ Michael prefers TypeScript for new projects.
 ## Roadmap
 
 - ~~Importers: ChatGPT memory export, Claude memory, markdown notes~~ ✓ `engram import`
-- Auto-inject: a Claude Code hook that loads your profile at session start — memory that works even when the model forgets to ask
+- ~~Auto-inject: a Claude Code hook that loads your profile at session start~~ ✓ `engram install claude-code`
 - Optional embeddings for semantic recall (pluggable, still local)
 - Dedupe/merge suggestions for near-duplicate memories
 
