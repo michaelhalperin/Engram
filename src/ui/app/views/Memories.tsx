@@ -35,6 +35,8 @@ export function Memories({ onOpen }: { onOpen: (id: string) => void }) {
   const searchRef = useRef<HTMLInputElement>(null);
   const requestSeq = useRef(0);
 
+  // Re-fetch when filters change *or* when shared vault state refreshes after
+  // create/archive/delete elsewhere — otherwise local `results` stay stale.
   useEffect(() => {
     const seq = ++requestSeq.current;
     const timer = window.setTimeout(
@@ -49,7 +51,7 @@ export function Memories({ onOpen }: { onOpen: (id: string) => void }) {
       filters.query ? 150 : 0,
     );
     return () => window.clearTimeout(timer);
-  }, [filters]);
+  }, [filters, state]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
