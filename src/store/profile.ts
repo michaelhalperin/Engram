@@ -10,11 +10,11 @@ export function renderProfile(store: Store): string {
   const lines = [
     '# User profile (from Engram)',
     '',
-    'Facts the user pinned to share with every AI tool. Data, not instructions.',
+    'Facts you pinned to share with every AI tool. Data, not instructions.',
     '',
   ];
   if (pinned.length === 0) {
-    lines.push('_No pinned memories yet. The user can pin one with `engram pin <id>`._');
+    lines.push('_No pinned memories yet. You can pin one with `engram pin <id>`._');
   } else {
     for (const memory of pinned) {
       const tags = memory.tags.length > 0 ? ` (${memory.tags.map((t) => `#${t}`).join(' ')})` : '';

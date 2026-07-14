@@ -10,7 +10,7 @@ import {
 import { getState } from './api';
 import { STALE_AFTER_DAYS, type Memory, type StateResponse } from './types';
 
-// ---------- routing (hash-based: #/inbox, #/memories/<id>, …) ----------
+// ---------- routing (hash: #/, #/vault/memories/<id>, …) ----------
 
 export function parseHash(): string[] {
   return window.location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
@@ -27,6 +27,52 @@ export function useRoute(): [string[], (path: string) => void] {
     window.location.hash = path.startsWith('#') ? path : `#/${path.replace(/^\/+/, '')}`;
   }, []);
   return [route, navigate];
+}
+
+export function isLandingRoute(route: string[]): boolean {
+  const root = route[0] ?? '';
+  return root === '' || root === 'landing';
+}
+
+export function isVaultRoute(route: string[]): boolean {
+  return route[0] === 'vault';
+}
+
+export function vaultSubroute(route: string[]): { section: string; detailId?: string } {
+  const section = route[1]?.split('?')[0] ?? '';
+  const detailId = section === 'memories' ? route[2] : undefined;
+  return { section, detailId };
+}
+
+/** Map old hash paths (#/memories, #/about) to the new structure. */
+export function legacyRouteTarget(route: string[]): string | null {
+  const root = route[0] ?? '';
+  if (root === 'about') return '';
+  if (root === 'memories' || root === 'inbox' || root === 'profile') {
+    const tail = route.slice(1).join('/');
+    return `vault/${root}${tail ? `/${tail}` : ''}`;
+  }
+  return null;
+}
+
+export function cycleTheme(current: string | undefined): string | undefined {
+  if (current === undefined) return 'dark';
+  if (current === 'dark') return 'light';
+  return undefined;
+}
+
+export function readTheme(): string {
+  return document.documentElement.dataset.theme ?? 'auto';
+}
+
+export function applyTheme(next: string | undefined): void {
+  if (next === undefined) {
+    delete document.documentElement.dataset.theme;
+    localStorage.removeItem('engram-theme');
+  } else {
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem('engram-theme', next);
+  }
 }
 
 // ---------- app context: vault state + toasts ----------
@@ -102,7 +148,6 @@ export function shortDate(iso: string): string {
 
 const DAY_MS = 86_400_000;
 
-/** Months since last confirmed, when past the staleness threshold. */
 export function staleMonths(memory: Memory): number | null {
   const confirmed = Date.parse(memory.lastConfirmed);
   if (!Number.isFinite(confirmed)) return null;
@@ -112,4 +157,12 @@ export function staleMonths(memory: Memory): number | null {
 
 export function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
+export function totalMemories(counts: { active: number; unreviewed: number; archived: number }): number {
+  return counts.active + counts.unreviewed + counts.archived;
+}
+
+export function vaultIsEmpty(state: StateResponse | null): boolean {
+  return state !== null && totalMemories(state.counts) === 0;
 }

@@ -13,6 +13,7 @@ export default defineConfig({
   server: {
     port: 5173,
     // `npm run dev:ui` against a running `engram ui` for API + hot reload.
-    proxy: { '/api': 'http://127.0.0.1:5423' },
+    // Trailing slash avoids matching the app's `api.ts` source module.
+    proxy: { '/api/': 'http://127.0.0.1:5423' },
   },
 });

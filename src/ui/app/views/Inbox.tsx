@@ -1,12 +1,57 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { reviewAction, reviewBulk } from '../api';
-import { EmptyState, MemoryCard } from '../components';
+import { EmptyState, MemoryCard, PageHeader, ShortcutLegend } from '../components';
 import { plural, useApp } from '../lib';
+import type { UiMemory } from '../types';
 
-/**
- * The audit ritual, keyboard first: j/k to move, a approve, r reject,
- * e open the editor, x toggle selection for bulk actions.
- */
+function ConflictPair({
+  memory,
+  onOpen,
+  selected,
+  onToggleSelect,
+  actions,
+  highlighted,
+}: {
+  memory: UiMemory;
+  onOpen: (id: string) => void;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
+  actions: ReactNode;
+  highlighted: boolean;
+}) {
+  const conflict = memory.conflicts?.[0];
+  if (!conflict) {
+    return (
+      <div className={highlighted ? 'v-cursor' : undefined}>
+        <MemoryCard
+          memory={memory}
+          onOpen={onOpen}
+          selected={selected}
+          onToggleSelect={onToggleSelect}
+          actions={actions}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`v-duel${highlighted ? ' v-duel-active' : ''}`}>
+      <MemoryCard
+        memory={memory}
+        onOpen={onOpen}
+        selected={selected}
+        onToggleSelect={onToggleSelect}
+        actions={actions}
+        hideConflicts
+      />
+      <div className="v-duel-mid" aria-hidden="true">
+        <span>vs</span>
+      </div>
+      <MemoryCard memory={conflict} onOpen={onOpen} />
+    </div>
+  );
+}
+
 export function Inbox({ onOpen }: { onOpen: (id: string) => void }) {
   const { state, refresh, toast } = useApp();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -71,58 +116,60 @@ export function Inbox({ onOpen }: { onOpen: (id: string) => void }) {
       return next;
     });
 
+  const cardActions = (id: string) => (
+    <>
+      <button className="v-btn v-btn-ok" onClick={() => act(id, 'approve')}>
+        Approve
+      </button>
+      <button className="v-btn" onClick={() => onOpen(id)}>
+        Edit
+      </button>
+      <button className="v-btn v-btn-no" onClick={() => act(id, 'reject')}>
+        Reject
+      </button>
+    </>
+  );
+
   return (
-    <div>
-      <div className="view-head">
-        <h1>Review inbox</h1>
-        <p className="muted">
-          What your AIs want you to keep. Nothing here is trusted until you rule on it.{' '}
-          <span className="kbd-hint">
-            <kbd>j</kbd>/<kbd>k</kbd> move · <kbd>a</kbd> approve · <kbd>r</kbd> reject · <kbd>e</kbd> edit ·{' '}
-            <kbd>x</kbd> select
-          </span>
-        </p>
-      </div>
+    <div className="v-view">
+      <PageHeader
+        title="Review inbox"
+        subtitle="Agent writes land here first. Nothing is trusted until you approve or reject it."
+      />
+
+      <ShortcutLegend />
 
       {inbox.length > 0 && (
-        <div className="bulk-bar">
-          <span className="muted">
+        <div className="v-bulk">
+          <span className="v-muted">
             {selected.size > 0 ? `${selected.size} selected` : `${plural(inbox.length, 'memory')} pending`}
           </span>
-          <button className="approve" onClick={() => bulk('approve')}>
-            ✓ approve {selected.size > 0 ? 'selected' : 'all'}
+          <button className="v-btn v-btn-ok" onClick={() => bulk('approve')}>
+            Approve {selected.size > 0 ? 'selected' : 'all'}
           </button>
-          <button className="reject" onClick={() => bulk('reject')}>
-            ✗ reject {selected.size > 0 ? 'selected' : 'all'}
+          <button className="v-btn v-btn-no" onClick={() => bulk('reject')}>
+            Reject {selected.size > 0 ? 'selected' : 'all'}
           </button>
         </div>
       )}
 
-      {inbox.length === 0 ? (
-        <EmptyState icon="✅" title="Inbox zero" hint="Nothing your AIs wrote awaits approval." />
-      ) : (
-        inbox.map((memory, index) => (
-          <div key={memory.id} className={index === cursor ? 'cursor-row' : ''}>
-            <MemoryCard
+      <div className="v-ledger">
+        {inbox.length === 0 ? (
+          <EmptyState title="Inbox zero" hint="Nothing your AIs wrote awaits approval." />
+        ) : (
+          inbox.map((memory, index) => (
+            <ConflictPair
+              key={memory.id}
               memory={memory}
               onOpen={onOpen}
               selected={selected.has(memory.id)}
               onToggleSelect={toggle}
-              actions={
-                <>
-                  <button className="approve" onClick={() => act(memory.id, 'approve')}>
-                    ✓ approve
-                  </button>
-                  <button onClick={() => onOpen(memory.id)}>✎ edit</button>
-                  <button className="reject" onClick={() => act(memory.id, 'reject')}>
-                    ✗ reject
-                  </button>
-                </>
-              }
+              actions={cardActions(memory.id)}
+              highlighted={index === cursor}
             />
-          </div>
-        ))
-      )}
+          ))
+        )}
+      </div>
     </div>
   );
 }

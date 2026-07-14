@@ -41,9 +41,10 @@ export function AddMemory({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal title="Add a memory" onClose={onClose}>
-      <label className="field">
+      <label className="v-field">
         <span>One atomic fact, phrased to be useful without context</span>
         <textarea
+          className="v-input"
           rows={4}
           autoFocus
           placeholder="e.g. Staging deploys go out Friday mornings"
@@ -54,10 +55,10 @@ export function AddMemory({ onClose }: { onClose: () => void }) {
           }}
         />
       </label>
-      <div className="field-row">
-        <label className="field">
+      <div className="v-field-row">
+        <label className="v-field">
           <span>Type</span>
-          <select value={type} onChange={(e) => setType(e.target.value)}>
+          <select className="v-input" value={type} onChange={(e) => setType(e.target.value)}>
             {MEMORY_TYPES.map((t) => (
               <option key={t} value={t}>
                 {t}
@@ -65,24 +66,24 @@ export function AddMemory({ onClose }: { onClose: () => void }) {
             ))}
           </select>
         </label>
-        <label className="field">
+        <label className="v-field">
           <span>Tags</span>
-          <input type="text" placeholder="comma, separated" value={tags} onChange={(e) => setTags(e.target.value)} />
+          <input className="v-input" type="text" placeholder="comma, separated" value={tags} onChange={(e) => setTags(e.target.value)} />
         </label>
-        <label className="field">
+        <label className="v-field">
           <span>Scope</span>
-          <input type="text" placeholder="global" value={scope} onChange={(e) => setScope(e.target.value)} />
+          <input className="v-input" type="text" placeholder="global" value={scope} onChange={(e) => setScope(e.target.value)} />
         </label>
       </div>
-      <label className="check">
+      <label className="v-check-label">
         <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
-        ★ pin into the profile every AI loads
+        pin into the profile every AI loads
       </label>
-      <div className="modal-actions">
-        <button className="primary" disabled={!text.trim() || busy} onClick={() => void save()}>
+      <div className="v-modal-foot">
+        <button className="v-btn v-btn-accent" disabled={!text.trim() || busy} onClick={() => void save()}>
           Save memory
         </button>
-        <span className="muted small">⌘⏎</span>
+        <span className="v-muted">⌘⏎</span>
       </div>
     </Modal>
   );

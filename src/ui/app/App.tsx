@@ -1,90 +1,105 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Toasts } from './components';
-import { AppProvider, useApp, useRoute } from './lib';
+import {
+  AppProvider,
+  applyTheme,
+  cycleTheme,
+  isLandingRoute,
+  isVaultRoute,
+  legacyRouteTarget,
+  readTheme,
+  useApp,
+  useRoute,
+  vaultSubroute,
+} from './lib';
 import { AddMemory } from './views/AddMemory';
 import { Dashboard } from './views/Dashboard';
 import { Inbox } from './views/Inbox';
+import { Landing } from './views/Landing';
 import { Memories } from './views/Memories';
 import { MemoryDetail } from './views/MemoryDetail';
 import { Profile } from './views/Profile';
 
-const NAV = [
-  { path: '', label: 'Dashboard', icon: '◉' },
-  { path: 'memories', label: 'Memories', icon: '🗂' },
-  { path: 'inbox', label: 'Review inbox', icon: '👁' },
-  { path: 'profile', label: 'Profile', icon: '★' },
+const VAULT_NAV = [
+  { path: '', label: 'Overview', hint: 'Status' },
+  { path: 'memories', label: 'Memories', hint: 'Catalog' },
+  { path: 'inbox', label: 'Inbox', hint: 'Review' },
+  { path: 'profile', label: 'Profile', hint: 'Pinned' },
 ] as const;
 
-function nextTheme(current: string | undefined): string | undefined {
-  if (current === undefined) return 'dark';
-  if (current === 'dark') return 'light';
-  return undefined;
+function themeLabel(theme: string): string {
+  if (theme === 'dark') return 'Dark';
+  if (theme === 'light') return 'Light';
+  return 'System';
 }
 
-function Shell() {
+function VaultShell() {
   const { state, error } = useApp();
   const [route, navigate] = useRoute();
   const [adding, setAdding] = useState(false);
-  const [, forceRender] = useState(0);
+  const [, bump] = useState(0);
 
-  const section = route[0]?.split('?')[0] ?? '';
-  const detailId = section === 'memories' ? route[1] : undefined;
-
-  const openMemory = useCallback((id: string) => navigate(`memories/${id}`), [navigate]);
-  const closeDetail = useCallback(() => navigate('memories'), [navigate]);
+  const { section, detailId } = vaultSubroute(route);
+  const openMemory = useCallback((id: string) => navigate(`vault/memories/${id}`), [navigate]);
+  const closeDetail = useCallback(() => navigate('vault/memories'), [navigate]);
 
   const toggleTheme = () => {
-    const next = nextTheme(document.documentElement.dataset.theme);
-    if (next === undefined) {
-      delete document.documentElement.dataset.theme;
-      localStorage.removeItem('engram-theme');
-    } else {
-      document.documentElement.dataset.theme = next;
-      localStorage.setItem('engram-theme', next);
-    }
-    forceRender((n) => n + 1);
+    applyTheme(cycleTheme(document.documentElement.dataset.theme));
+    bump((n) => n + 1);
   };
 
-  const theme = document.documentElement.dataset.theme ?? 'auto';
+  const theme = readTheme();
   const inboxCount = state?.counts.unreviewed ?? 0;
 
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <a className="logo" href="#/">
-          <span className="logo-dot">◉</span> engram
+    <div className="v-shell">
+      <aside className="v-rail">
+        <a className="v-brand" href="#/vault">
+          <span className="v-brand-mark" aria-hidden="true" />
+          <span className="v-brand-text">engram</span>
         </a>
-        <nav>
-          {NAV.map((item) => (
+
+        <nav className="v-nav" aria-label="Vault navigation">
+          {VAULT_NAV.map((item) => (
             <a
               key={item.path}
-              className={`nav-item${section === item.path ? ' nav-active' : ''}`}
-              href={`#/${item.path}`}
+              className={`v-nav-link${section === item.path ? ' v-nav-active' : ''}`}
+              href={item.path ? `#/vault/${item.path}` : '#/vault'}
             >
-              <span className="nav-icon">{item.icon}</span>
-              {item.label}
-              {item.path === 'inbox' && inboxCount > 0 && <span className="nav-badge">{inboxCount}</span>}
+              <span className="v-nav-hint">{item.hint}</span>
+              <span className="v-nav-label">{item.label}</span>
+              {item.path === 'inbox' && inboxCount > 0 && (
+                <span className="v-nav-badge">{inboxCount}</span>
+              )}
             </a>
           ))}
         </nav>
-        <button className="primary add-button" onClick={() => setAdding(true)}>
-          + Add memory
-        </button>
-        <div className="sidebar-foot">
-          <button className="ghost" onClick={toggleTheme} title="Cycle theme">
-            {theme === 'auto' ? '◐ auto' : theme === 'dark' ? '● dark' : '○ light'}
+
+        <div className="v-rail-foot">
+          <button className="v-btn v-btn-accent v-btn-block" onClick={() => setAdding(true)}>
+            New memory
           </button>
-          <span className="muted small">local only · 127.0.0.1</span>
+          <div className="v-rail-meta">
+            <a className="v-link-quiet" href="#/">
+              Docs / landing
+            </a>
+            <button className="v-btn v-btn-ghost v-btn-sm" onClick={toggleTheme} aria-label="Cycle theme">
+              {themeLabel(theme)}
+            </button>
+          </div>
         </div>
       </aside>
 
-      <main className="main">
-        {error && <div className="error-banner">engram server unreachable: {error}</div>}
-        {section === '' && <Dashboard onOpen={openMemory} />}
-        {section === 'memories' && <Memories onOpen={openMemory} />}
-        {section === 'inbox' && <Inbox onOpen={openMemory} />}
-        {section === 'profile' && <Profile onOpen={openMemory} />}
-      </main>
+      <div className="v-workspace">
+        <div className="v-workspace-bg" aria-hidden="true" />
+        <main className="v-main">
+          {error && <div className="v-alert">Server unreachable: {error}</div>}
+          {section === '' && <Dashboard onOpen={openMemory} />}
+          {section === 'memories' && <Memories onOpen={openMemory} />}
+          {section === 'inbox' && <Inbox onOpen={openMemory} />}
+          {section === 'profile' && <Profile onOpen={openMemory} />}
+        </main>
+      </div>
 
       {detailId && <MemoryDetail id={detailId} onClose={closeDetail} />}
       {adding && <AddMemory onClose={() => setAdding(false)} />}
@@ -93,10 +108,37 @@ function Shell() {
   );
 }
 
+function Router() {
+  const [route, navigate] = useRoute();
+
+  useEffect(() => {
+    const legacy = legacyRouteTarget(route);
+    if (legacy !== null) navigate(legacy);
+  }, [route, navigate]);
+
+  if (isLandingRoute(route)) {
+    return (
+      <>
+        <Landing />
+        <Toasts />
+      </>
+    );
+  }
+
+  if (isVaultRoute(route)) return <VaultShell />;
+
+  return (
+    <>
+      <Landing />
+      <Toasts />
+    </>
+  );
+}
+
 export function App() {
   return (
     <AppProvider>
-      <Shell />
+      <Router />
     </AppProvider>
   );
 }

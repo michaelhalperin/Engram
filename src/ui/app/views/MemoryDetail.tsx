@@ -49,14 +49,14 @@ export function MemoryDetail({ id, onClose }: { id: string; onClose: () => void 
   if (missing) {
     return (
       <Drawer onClose={onClose}>
-        <p className="muted">This memory no longer exists.</p>
+        <p className="v-muted">This memory no longer exists.</p>
       </Drawer>
     );
   }
   if (!detail) {
     return (
       <Drawer onClose={onClose}>
-        <p className="muted">loading…</p>
+        <p className="v-muted">Loading…</p>
       </Drawer>
     );
   }
@@ -70,26 +70,26 @@ export function MemoryDetail({ id, onClose }: { id: string; onClose: () => void 
 
   return (
     <Drawer onClose={onClose}>
-      <div className="detail-head">
+      <div className="v-detail-head">
         <StatusDot status={memory.status} />
-        <code className="detail-id">{memory.id}</code>
+        <code>{memory.id}</code>
       </div>
-      <div className="detail-badges">
+      <div className="v-detail-tags">
         <MemoryBadges memory={memory} />
       </div>
-      <p className="muted small">
-        saved {shortDate(memory.created)} by <strong>{memory.source}</strong> · last confirmed{' '}
+      <p className="v-muted v-detail-meta">
+        saved {shortDate(memory.created)} by <strong>{memory.source}</strong> · confirmed{' '}
         {shortDate(memory.lastConfirmed)}
       </p>
 
-      <label className="field">
+      <label className="v-field">
         <span>Memory</span>
-        <textarea rows={5} value={body} onChange={(e) => setBody(e.target.value)} />
+        <textarea className="v-input" rows={5} value={body} onChange={(e) => setBody(e.target.value)} />
       </label>
-      <div className="field-row">
-        <label className="field">
+      <div className="v-field-row">
+        <label className="v-field">
           <span>Type</span>
-          <select value={type} onChange={(e) => setType(e.target.value)}>
+          <select className="v-input" value={type} onChange={(e) => setType(e.target.value)}>
             {MEMORY_TYPES.map((t) => (
               <option key={t} value={t}>
                 {t}
@@ -97,18 +97,18 @@ export function MemoryDetail({ id, onClose }: { id: string; onClose: () => void 
             ))}
           </select>
         </label>
-        <label className="field">
+        <label className="v-field">
           <span>Tags</span>
-          <input type="text" value={tags} placeholder="comma, separated" onChange={(e) => setTags(e.target.value)} />
+          <input className="v-input" type="text" value={tags} placeholder="comma, separated" onChange={(e) => setTags(e.target.value)} />
         </label>
-        <label className="field">
+        <label className="v-field">
           <span>Scope</span>
-          <input type="text" value={scope} placeholder="global" onChange={(e) => setScope(e.target.value)} />
+          <input className="v-input" type="text" value={scope} placeholder="global" onChange={(e) => setScope(e.target.value)} />
         </label>
       </div>
       {dirty && (
         <button
-          className="primary"
+          className="v-btn v-btn-accent"
           onClick={() =>
             act(
               () => patchMemory(memory.id, { text: body, type, tags, scope: scope.trim() || null }),
@@ -120,48 +120,47 @@ export function MemoryDetail({ id, onClose }: { id: string; onClose: () => void 
         </button>
       )}
 
-      <div className="detail-actions">
+      <div className="v-detail-actions">
         {memory.status === 'unreviewed' && (
           <>
-            <button className="approve" onClick={() => act(() => reviewAction(memory.id, 'approve'), 'approved')}>
-              ✓ approve
+            <button className="v-btn v-btn-ok" onClick={() => act(() => reviewAction(memory.id, 'approve'), 'approved')}>
+              Approve
             </button>
-            <button className="reject" onClick={() => act(() => reviewAction(memory.id, 'reject'), 'rejected')}>
-              ✗ reject
+            <button className="v-btn v-btn-no" onClick={() => act(() => reviewAction(memory.id, 'reject'), 'rejected')}>
+              Reject
             </button>
           </>
         )}
-        <button onClick={() => act(() => reviewAction(memory.id, 'confirm'), 'confirmed as still true')}>
-          still true
+        <button className="v-btn" onClick={() => act(() => reviewAction(memory.id, 'confirm'), 'confirmed')}>
+          Still true
         </button>
         <button
+          className="v-btn"
           onClick={() =>
-            act(() => patchMemory(memory.id, { pinned: !memory.pinned }), memory.pinned ? 'unpinned' : 'pinned to profile')
+            act(() => patchMemory(memory.id, { pinned: !memory.pinned }), memory.pinned ? 'unpinned' : 'pinned')
           }
         >
-          {memory.pinned ? '☆ unpin' : '★ pin'}
+          {memory.pinned ? 'Unpin' : 'Pin to profile'}
         </button>
         {memory.status === 'archived' ? (
-          <button onClick={() => act(() => patchMemory(memory.id, { status: 'active' }), 'restored')}>
-            restore
+          <button className="v-btn" onClick={() => act(() => patchMemory(memory.id, { status: 'active' }), 'restored')}>
+            Restore
           </button>
         ) : (
           <button
+            className="v-btn"
             onClick={() =>
               act(
                 () => archiveMemory(memory.id),
-                'archived — file kept',
+                'archived',
                 () => void patchMemory(memory.id, { status: 'active' }).then(() => Promise.all([load(), refresh()])),
               )
             }
           >
-            archive
+            Archive
           </button>
         )}
-        <DangerButton
-          label="delete file"
-          confirmLabel="really delete?"
-          onConfirm={() =>
+        <DangerButton label="Delete file" confirmLabel="Really delete?" onConfirm={() =>
             void hardDeleteMemory(memory.id).then(() => {
               toast('deleted permanently', 'warn');
               void refresh();
@@ -172,35 +171,54 @@ export function MemoryDetail({ id, onClose }: { id: string; onClose: () => void 
       </div>
 
       {conflicts.length > 0 && (
-        <section className="detail-section">
-          <h3>⚔️ Possible conflicts</h3>
-          {conflicts.map((conflict) => (
-            <div key={conflict.id} className="conflict-row">
-              <a className="link" href={`#/memories/${conflict.id}`}>
-                {conflict.id}
-              </a>
-              : <em>{conflict.body}</em>
+        <section className="v-detail-section">
+          <h3 className="v-panel-title">Possible conflicts</h3>
+          <div className="v-duel v-duel-compact">
+            <div className="v-duel-side">
+              <p>{memory.body}</p>
+              <code className="v-muted">{memory.id}</code>
             </div>
-          ))}
+            <div className="v-duel-mid">vs</div>
+            {conflicts.map((c) => (
+              <div key={c.id} className="v-duel-side">
+                <p>{c.body}</p>
+                <a className="v-text-link" href={`#/vault/memories/${c.id}`}>
+                  {c.id}
+                </a>
+              </div>
+            ))}
+          </div>
         </section>
       )}
 
       {history.length > 1 && (
-        <section className="detail-section">
-          <h3>History — correction chain</h3>
-          <ol className="history">
-            {history.map((entry) => (
-              <li key={entry.id} className={entry.id === memory.id ? 'history-current' : ''}>
-                <StatusDot status={entry.status} />
-                {entry.id === memory.id ? (
-                  <code>{entry.id}</code>
-                ) : (
-                  <a className="link" href={`#/memories/${entry.id}`}>
-                    {entry.id}
-                  </a>
-                )}
-                <span className="muted small"> {shortDate(entry.created)}</span>
-                <div className="history-body">{entry.body}</div>
+        <section className="v-detail-section">
+          <h3 className="v-panel-title">Correction chain</h3>
+          <ol className="v-chain">
+            {history.map((entry, index) => (
+              <li
+                key={entry.id}
+                className={`v-chain-item${entry.id === memory.id ? ' v-chain-current' : ''}`}
+              >
+                <div className="v-chain-rail">
+                  <span className="v-chain-dot" />
+                  {index < history.length - 1 && <span className="v-chain-line" />}
+                </div>
+                <div className="v-chain-body">
+                  <div className="v-chain-head">
+                    <StatusDot status={entry.status} />
+                    {entry.id === memory.id ? (
+                      <code>{entry.id}</code>
+                    ) : (
+                      <a className="v-text-link" href={`#/vault/memories/${entry.id}`}>
+                        {entry.id}
+                      </a>
+                    )}
+                    <span className="v-muted">{shortDate(entry.created)}</span>
+                    {entry.id === memory.id && <span className="v-tag v-tag-type">current</span>}
+                  </div>
+                  <p>{entry.body}</p>
+                </div>
               </li>
             ))}
           </ol>
