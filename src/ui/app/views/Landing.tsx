@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { CopyButton } from '../components';
+import { EngramLogo } from '../logo';
 
 const MCP_JSON = `{
   "mcpServers": {
@@ -441,7 +442,7 @@ export function Landing() {
 
       <header className="lp-bar">
         <a className="lp-brand" href="#/">
-          engram
+          <EngramLogo className="lp-brand-lockup" markClassName="lp-brand-mark" textClassName="lp-brand-text" />
         </a>
         <a className="lp-enter" href="#/vault">
           Open vault
@@ -574,7 +575,13 @@ export function Landing() {
 
       <footer className="lp-end">
         <Reveal>
-          <p className="lp-end-brand">engram</p>
+          <div className="lp-end-brand">
+            <EngramLogo
+              className="lp-end-brand-lockup"
+              markClassName="lp-end-brand-mark"
+              textClassName="lp-end-brand-text"
+            />
+          </div>
           <a className="lp-cta-main" href="#/vault">
             Open your vault
           </a>

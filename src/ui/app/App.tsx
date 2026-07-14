@@ -12,6 +12,7 @@ import {
   useRoute,
   vaultSubroute,
 } from './lib';
+import { EngramLogo } from './logo';
 import { AddMemory } from './views/AddMemory';
 import { Dashboard } from './views/Dashboard';
 import { Inbox } from './views/Inbox';
@@ -55,8 +56,7 @@ function VaultShell() {
     <div className="v-shell">
       <aside className="v-rail">
         <a className="v-brand" href="#/vault">
-          <span className="v-brand-mark" aria-hidden="true" />
-          <span className="v-brand-text">engram</span>
+          <EngramLogo className="v-brand-lockup" markClassName="v-brand-mark" textClassName="v-brand-text" />
         </a>
 
         <nav className="v-nav" aria-label="Vault navigation">

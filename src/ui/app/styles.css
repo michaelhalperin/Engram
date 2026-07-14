@@ -81,11 +81,30 @@ button { font: inherit; cursor: pointer; }
 }
 
 .lp-brand {
+  text-decoration: none;
+  color: var(--lp-steel);
+}
+
+.lp-brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.lp-brand-mark {
+  --mark-accent: #0e7490;
+  flex-shrink: 0;
+}
+
+.lp-brand-text {
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  text-decoration: none;
   color: var(--lp-ink);
+}
+
+.engram-mark-accent {
+  fill: var(--mark-accent, currentColor);
 }
 
 .lp-enter {
@@ -849,11 +868,29 @@ button { font: inherit; cursor: pointer; }
 }
 
 .lp-end-brand {
+  margin-bottom: 24px;
+}
+
+.lp-end-brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(12px, 2.5vw, 20px);
+  color: var(--lp-steel);
+}
+
+.lp-end-brand-mark {
+  --mark-accent: #0e7490;
+  width: clamp(40px, 8vw, 72px);
+  height: clamp(40px, 8vw, 72px);
+  flex-shrink: 0;
+}
+
+.lp-end-brand-text {
   font-size: clamp(40px, 8vw, 72px);
   font-weight: 800;
   letter-spacing: -0.05em;
   line-height: 1;
-  margin-bottom: 24px;
+  color: var(--lp-ink);
 }
 
 .lp-end-note {
@@ -1035,18 +1072,21 @@ button { font: inherit; cursor: pointer; }
 .v-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
   padding: 4px 8px;
   text-decoration: none;
   color: var(--v-rail-active);
 }
 
+.v-brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .v-brand-mark {
-  width: 10px;
-  height: 10px;
-  background: var(--v-accent);
-  box-shadow: 0 0 12px var(--v-accent-glow);
-  animation: v-pulse 2.8s ease-in-out infinite;
+  --mark-accent: var(--v-accent);
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 8px var(--v-accent-glow));
 }
 
 .v-brand-text {
@@ -2158,7 +2198,6 @@ button { font: inherit; cursor: pointer; }
   .v-modal,
   .v-drawer,
   .v-toast,
-  .v-brand-mark,
   .v-status-unreviewed { animation: none !important; }
   .v-bar-fill { transition: none; }
 }
