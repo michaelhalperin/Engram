@@ -140,6 +140,13 @@ export class Store {
     return { memory, existing: false };
   }
 
+  /** Exact-duplicate lookup: a memory whose normalized body matches this text. */
+  findDuplicate(text: string): Memory | undefined {
+    this.maybeSync();
+    const id = this.db.byHash(bodyHash(text.trim()));
+    return id ? this.get(id) : undefined;
+  }
+
   get(id: string): Memory | undefined {
     this.maybeSync();
     try {

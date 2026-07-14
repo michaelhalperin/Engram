@@ -15,4 +15,13 @@ export {
   type SearchHit,
   type UpdatePatch,
 } from './store/types.js';
+export {
+  importFacts,
+  type Extraction,
+  type ImportOptions,
+  type ImportReport,
+  type ImportedFact,
+} from './import/core.js';
+export { parseFactLines } from './import/text.js';
+export { extractMarkdownNotes } from './import/markdown.js';
 export { VERSION } from './version.js';

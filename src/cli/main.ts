@@ -97,6 +97,70 @@ program
     }
   });
 
+const importCmd = program
+  .command('import')
+  .description('bring memories in from other tools — everything lands in the review inbox');
+
+type ImportCliOpts = { scope?: string; tags?: string; type?: string; dryRun?: boolean };
+
+function withImportOptions(cmd: Command): Command {
+  return cmd
+    .option('--scope <scope>', 'scope every imported fact to this project')
+    .option('--tags <tags>', 'comma-separated tags added to every fact')
+    .option('-t, --type <type>', `force a type: ${MEMORY_TYPES.join(', ')}`)
+    .option('--dry-run', 'show what would be imported without writing anything');
+}
+
+async function executeImport(
+  source: string,
+  opts: ImportCliOpts,
+  extract: () => Promise<import('../import/core.js').Extraction>,
+): Promise<void> {
+  const { runImport } = await import('../cli/import.js');
+  let extraction;
+  try {
+    extraction = await extract();
+  } catch (err) {
+    fail((err as Error).message);
+  }
+  const store = openStore();
+  try {
+    runImport(store, extraction, {
+      source,
+      scope: opts.scope,
+      tags: parseTags(opts.tags),
+      type: parseType(opts.type),
+      dryRun: opts.dryRun === true,
+    });
+  } finally {
+    store.close();
+  }
+}
+
+withImportOptions(
+  importCmd
+    .command('text')
+    .description('a pasted memory list — one fact per line, bullets ok')
+    .argument('<file>'),
+).action((file: string, opts: ImportCliOpts) =>
+  executeImport('import:text', opts, async () => {
+    const { parseFactLines } = await import('../import/text.js');
+    return { facts: parseFactLines(readFileSync(file, 'utf8')).map((text) => ({ text })), errors: [] };
+  }),
+);
+
+withImportOptions(
+  importCmd
+    .command('markdown')
+    .description('a folder of markdown notes (Obsidian-style) — one note per memory')
+    .argument('<dir>'),
+).action((dir: string, opts: ImportCliOpts) =>
+  executeImport('import:markdown', opts, async () => {
+    const { extractMarkdownNotes } = await import('../import/markdown.js');
+    return extractMarkdownNotes(dir);
+  }),
+);
+
 program
   .command('search')
   .description('full-text search across memories')
