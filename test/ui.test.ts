@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Store } from '../src/index.js';
 import { startUi, type UiHandle } from '../src/ui/server.js';
+import { fakeEmbedder } from './helpers.js';
 
 let home: string;
 let store: Store;
@@ -212,6 +213,50 @@ describe('ui server', () => {
     const data = await res.json();
     expect(data.memory.scope).toBe('acme-api');
     expect(data.conflicts).toHaveLength(1);
+  });
+
+  it('serves the semantic map when an embedder is attached', async () => {
+    store.attachEmbedder(
+      fakeEmbedder({
+        'michael dislikes almonds.': [1, 0.1, 0],
+        'michael dislikes quinoa.': [0.95, 0.2, 0],
+        'deploys go out friday mornings.': [0, 0.1, 1],
+        'releases ship monday evenings.': [0.1, 0, 0.95],
+      }),
+    );
+    store.create({ text: 'Michael dislikes almonds.', source: 'cli' });
+    store.create({ text: 'Michael dislikes quinoa.', source: 'cli' });
+    store.create({ text: 'Deploys go out Friday mornings.', source: 'cli', scope: 'acme-api' });
+    store.create({ text: 'Releases ship Monday evenings.', source: 'cli', status: 'unreviewed' });
+
+    const res = await fetch(`${ui.url}/api/semantic-map`);
+    const data = await res.json();
+    expect(data.available).toBe(true);
+    expect(data.model).toBe('fake-embedder');
+    expect(data.points).toHaveLength(4);
+    for (const p of data.points) {
+      expect(p.x).toBeGreaterThanOrEqual(0);
+      expect(p.x).toBeLessThanOrEqual(1);
+      expect(p.body).toBeTruthy();
+    }
+    const scoped = data.points.find((p: { scope: string | null }) => p.scope === 'acme-api');
+    expect(scoped.body).toContain('Friday');
+    // Each memory ties to its strongest neighbor: two food facts, two deploy facts.
+    const pairs = data.edges.map((e: { a: string; b: string }) => `${e.a}|${e.b}`);
+    expect(pairs.some((p: string) => p.includes('almonds') && p.includes('quinoa'))).toBe(true);
+    expect(data.edges.every((e: { similarity: number }) => e.similarity >= 0.6)).toBe(true);
+  });
+
+  it('explains itself when the semantic index is unavailable', async () => {
+    process.env.ENGRAM_NO_EMBED = '1';
+    try {
+      const res = await fetch(`${ui.url}/api/semantic-map`);
+      const data = await res.json();
+      expect(data.available).toBe(false);
+      expect(data.reason).toContain('ENGRAM_NO_EMBED');
+    } finally {
+      delete process.env.ENGRAM_NO_EMBED;
+    }
   });
 
   it('404s on unknown ids and 400s on bad input', async () => {

@@ -90,6 +90,36 @@ async function withConflicts(store: Store, memory: Memory): Promise<Memory & { c
   return { ...memory, conflicts: await store.detectConflicts(memory) };
 }
 
+/** Strongest semantic tie per memory, drawn as map edges. O(n²) — capped. */
+const EDGE_MIN_SIMILARITY = 0.6;
+const EDGE_MAX_POINTS = 600;
+
+function semanticEdges(
+  corpus: Array<{ memory: Memory; vector: Float32Array }>,
+): Array<{ a: string; b: string; similarity: number }> {
+  if (corpus.length < 2 || corpus.length > EDGE_MAX_POINTS) return [];
+  const edges = new Map<string, { a: string; b: string; similarity: number }>();
+  for (let i = 0; i < corpus.length; i++) {
+    let best = -1;
+    let bestSim = EDGE_MIN_SIMILARITY;
+    for (let j = 0; j < corpus.length; j++) {
+      if (i === j) continue;
+      let sim = 0;
+      const a = corpus[i].vector;
+      const b = corpus[j].vector;
+      for (let d = 0; d < a.length; d++) sim += a[d] * b[d];
+      if (sim > bestSim) {
+        bestSim = sim;
+        best = j;
+      }
+    }
+    if (best < 0) continue;
+    const [idA, idB] = [corpus[i].memory.id, corpus[best].memory.id].sort();
+    edges.set(`${idA}|${idB}`, { a: idA, b: idB, similarity: bestSim });
+  }
+  return [...edges.values()];
+}
+
 /** Hashed vite assets under /assets/, plus the odd root-level file (favicon). */
 function serveStatic(res: ServerResponse, pathname: string): boolean {
   const type = ASSET_TYPES[extname(pathname)];
@@ -162,6 +192,36 @@ export function startUi(store: Store, opts: { port?: number } = {}): Promise<UiH
 
       if (method === 'GET' && url.pathname === '/api/profile') {
         return send(res, 200, { markdown: renderProfile(store), pinned: store.pinned() });
+      }
+
+      if (method === 'GET' && url.pathname === '/api/semantic-map') {
+        const semantics = await store.semantics();
+        if (!semantics) {
+          const { loadEmbedder } = await import('../store/embedder.js');
+          const { reason } = await loadEmbedder(store.home);
+          return send(res, 200, { available: false, reason: reason ?? 'no local embedding model' });
+        }
+        await semantics.ensureFresh();
+        const corpus = semantics.corpus();
+        const { projectTo2d } = await import('../store/projection.js');
+        const coords = projectTo2d(corpus.map((c) => c.vector));
+        const points = corpus.map(({ memory }, i) => ({
+          id: memory.id,
+          x: coords[i].x,
+          y: coords[i].y,
+          type: memory.type,
+          status: memory.status,
+          scope: memory.scope ?? null,
+          pinned: memory.pinned,
+          source: memory.source,
+          body: memory.body.length > 200 ? `${memory.body.slice(0, 199)}…` : memory.body,
+        }));
+        return send(res, 200, {
+          available: true,
+          model: semantics.embedder.model,
+          points,
+          edges: semanticEdges(corpus),
+        });
       }
 
       const detailMatch = url.pathname.match(/^\/api\/memories\/([a-z0-9-]+)$/);

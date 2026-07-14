@@ -20,12 +20,14 @@ import { Landing } from './views/Landing';
 import { Memories } from './views/Memories';
 import { MemoryDetail } from './views/MemoryDetail';
 import { Profile } from './views/Profile';
+import { SemanticMap } from './views/SemanticMap';
 
 const VAULT_NAV = [
   { path: '', label: 'Overview', hint: 'Status' },
   { path: 'memories', label: 'Memories', hint: 'Catalog' },
   { path: 'inbox', label: 'Inbox', hint: 'Review' },
   { path: 'profile', label: 'Profile', hint: 'Pinned' },
+  { path: 'map', label: 'Map', hint: 'Semantic' },
 ] as const;
 
 function themeLabel(theme: string): string {
@@ -96,6 +98,7 @@ function VaultShell() {
           {error && <div className="v-alert">Server unreachable: {error}</div>}
           {section === '' && <Dashboard onOpen={openMemory} />}
           {section === 'memories' && <Memories onOpen={openMemory} />}
+          {section === 'map' && <SemanticMap onOpen={openMemory} />}
           {section === 'inbox' && <Inbox onOpen={openMemory} />}
           {section === 'profile' && <Profile onOpen={openMemory} />}
         </main>

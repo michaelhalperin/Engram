@@ -62,6 +62,13 @@ export class Semantics {
       .slice(0, opts.limit ?? 8);
   }
 
+  /** Every embedded, non-archived memory with its vector — for the semantic map. */
+  corpus(): Array<{ memory: Memory; vector: Float32Array }> {
+    return this.db
+      .embeddingRows(this.embedder.model)
+      .map(({ memory, vector }) => ({ memory, vector: bytesToVector(vector) }));
+  }
+
   /** Nearest non-archived neighbors of an already-embedded memory, by raw similarity. */
   neighbors(memory: Memory, limit = 8): SemanticHit[] {
     const bytes = this.db.getEmbedding(memory.id, this.embedder.model);

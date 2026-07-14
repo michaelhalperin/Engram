@@ -28,6 +28,28 @@ export interface DetailResponse {
   conflicts: Memory[];
 }
 
+export interface MapPoint {
+  id: string;
+  x: number;
+  y: number;
+  type: MemoryType;
+  status: MemoryStatus;
+  scope: string | null;
+  pinned: boolean;
+  source: string;
+  body: string;
+}
+
+export interface MapEdge {
+  a: string;
+  b: string;
+  similarity: number;
+}
+
+export type SemanticMapResponse =
+  | { available: false; reason: string }
+  | { available: true; model: string; points: MapPoint[]; edges: MapEdge[] };
+
 export interface StateQuery {
   query?: string;
   status?: string;

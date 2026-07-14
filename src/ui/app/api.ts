@@ -1,4 +1,11 @@
-import type { DetailResponse, Memory, StateQuery, StateResponse, UiMemory } from './types';
+import type {
+  DetailResponse,
+  Memory,
+  SemanticMapResponse,
+  StateQuery,
+  StateResponse,
+  UiMemory,
+} from './types';
 
 /** The custom header forces a CORS preflight for cross-origin callers — the server's CSRF guard. */
 const MUTATE_HEADERS = { 'x-engram': '1', 'content-type': 'application/json' };
@@ -28,6 +35,10 @@ export function getMemory(id: string): Promise<DetailResponse> {
 
 export function getProfile(): Promise<{ markdown: string; pinned: Memory[] }> {
   return request('/api/profile');
+}
+
+export function getSemanticMap(): Promise<SemanticMapResponse> {
+  return request('/api/semantic-map');
 }
 
 export function createMemory(input: {
