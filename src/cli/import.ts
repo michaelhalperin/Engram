@@ -5,14 +5,14 @@ import { dim, green, yellow } from './format.js';
 const PREVIEW_LIMIT = 15;
 
 /** Run an extraction through the store and narrate the outcome. */
-export function runImport(store: Store, extraction: Extraction, opts: ImportOptions): void {
+export async function runImport(store: Store, extraction: Extraction, opts: ImportOptions): Promise<void> {
   for (const error of extraction.errors) console.log(yellow(`skipped ${error}`));
   if (extraction.facts.length === 0) {
     console.log(dim('nothing to import'));
     return;
   }
 
-  const report = importFacts(store, extraction.facts, opts);
+  const report = await importFacts(store, extraction.facts, opts);
 
   if (opts.dryRun) {
     for (const fact of report.planned.slice(0, PREVIEW_LIMIT)) {

@@ -185,6 +185,63 @@ describe('hybrid recall', () => {
   });
 });
 
+describe('detectConflicts', () => {
+  // Vectors mirror similarities measured with the real model on 2026-07-14.
+  const table = {
+    'michael dislikes almonds.': [1, 0, 0, 0],
+    'michael dislikes finding freelance clients himself.': [0.557, 0.83, 0, 0], // cosine ≈ 0.557 vs almonds
+    'standup is at 10am every day.': [0, 0, 1, 0],
+    'standup is at 9:30am every day.': [0, 0, 0.95, 0.31], // cosine ≈ 0.95
+    'deploys go out friday mornings.': [0, 0, 0, 1],
+    'releases ship monday evenings.': [0, 0, 0.31, 0.95], // same assertion, zero shared words
+  };
+
+  it('vetoes token-overlap pairs that mean different things (the almonds case)', async () => {
+    store.attachEmbedder(fakeEmbedder(table));
+    store.create({ text: 'Michael dislikes almonds.', source: 'cli' });
+    const { memory } = store.create({
+      text: 'Michael dislikes finding freelance clients himself.',
+      source: 'cli',
+    });
+    // The plain heuristic flags them; meaning clears them.
+    expect(store.findConflicts(memory)).toHaveLength(1);
+    expect(await store.detectConflicts(memory)).toHaveLength(0);
+  });
+
+  it('keeps genuinely contradictory pairs', async () => {
+    store.attachEmbedder(fakeEmbedder(table));
+    store.create({ text: 'Standup is at 10am every day.', source: 'cli' });
+    const { memory } = store.create({ text: 'Standup is at 9:30am every day.', source: 'cli' });
+    const conflicts = await store.detectConflicts(memory);
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].body).toContain('10am');
+  });
+
+  it('catches rewordings with no shared words at all', async () => {
+    store.attachEmbedder(fakeEmbedder(table));
+    store.create({ text: 'Deploys go out Friday mornings.', source: 'cli' });
+    const { memory } = store.create({ text: 'Releases ship Monday evenings.', source: 'cli' });
+    expect(store.findConflicts(memory)).toHaveLength(0); // BM25 sees nothing
+    const conflicts = await store.detectConflicts(memory);
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].body).toContain('Friday');
+  });
+
+  it('falls back to the plain heuristic without an embedder', async () => {
+    process.env.ENGRAM_NO_EMBED = '1';
+    try {
+      store.create({ text: 'Michael dislikes almonds.', source: 'cli' });
+      const { memory } = store.create({
+        text: 'Michael dislikes finding freelance clients himself.',
+        source: 'cli',
+      });
+      expect(await store.detectConflicts(memory)).toHaveLength(1);
+    } finally {
+      delete process.env.ENGRAM_NO_EMBED;
+    }
+  });
+});
+
 describe('neighbors and similarity', () => {
   it('reads stored vectors without re-embedding', async () => {
     store.attachEmbedder(

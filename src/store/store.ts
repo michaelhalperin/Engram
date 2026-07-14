@@ -366,6 +366,41 @@ export class Store {
     return conflicts;
   }
 
+  /**
+   * findConflicts with meaning: token-overlap candidates survive only if they
+   * are actually about the same thing, and same-assertion rewordings are
+   * caught even with no shared words. Falls back to the plain heuristic when
+   * no local model is available.
+   */
+  async detectConflicts(memory: Memory, limit = 3): Promise<Memory[]> {
+    let semantics;
+    try {
+      semantics = await this.semantics();
+      await semantics?.ensureFresh();
+    } catch {
+      semantics = undefined;
+    }
+    if (!semantics) return this.findConflicts(memory, limit);
+
+    const conflicts: Memory[] = [];
+    const seen = new Set([memory.id, memory.supersedes]);
+    for (const candidate of this.findConflicts(memory, limit * 3)) {
+      const similarity = semantics.similarityBetween(memory, candidate);
+      // No vector = no veto: behave like the plain heuristic rather than go silent.
+      if (similarity !== undefined && similarity < CONFLICT_SEMANTIC_VETO) continue;
+      conflicts.push(candidate);
+      seen.add(candidate.id);
+    }
+    for (const { memory: neighbor, similarity } of semantics.neighbors(memory, 8)) {
+      if (similarity < CONFLICT_SEMANTIC_ALONE) break; // neighbors arrive sorted
+      if (seen.has(neighbor.id)) continue;
+      if (!scopesCanConflict(memory.scope, neighbor.scope)) continue;
+      conflicts.push(neighbor);
+      seen.add(neighbor.id);
+    }
+    return conflicts.slice(0, limit);
+  }
+
   /** The core profile: pinned, non-archived memories. */
   pinned(): Memory[] {
     this.maybeSync();
@@ -447,6 +482,17 @@ export class Store {
     this.db.upsert(memory, bodyHash(memory.body), Math.floor(stat.mtimeMs), stat.size);
   }
 }
+
+/**
+ * Cosine gates measured against a real vault (MiniLM, 2026-07): unrelated
+ * facts that merely share words ("dislikes almonds" / "dislikes finding
+ * freelance clients") land near 0.55; genuine contradictions ("standup at
+ * 9:30" / "standup at 10") land at 0.91+. Below the veto, a token-overlap
+ * candidate is a different topic; above ALONE, two facts assert the same kind
+ * of thing even when they share no words.
+ */
+export const CONFLICT_SEMANTIC_VETO = 0.65;
+export const CONFLICT_SEMANTIC_ALONE = 0.85;
 
 /** Semantic hits have no FTS match to excerpt; the fact's opening line stands in. */
 function leadSnippet(body: string, max = 140): string {

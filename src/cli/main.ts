@@ -69,7 +69,7 @@ program
   .option('--scope <scope>', 'project/workspace this fact belongs to (omit for global)')
   .option('--pin', 'pin into the core profile served to AI tools')
   .option('--source <source>', 'provenance label', 'cli')
-  .action((words: string[], opts) => {
+  .action(async (words: string[], opts) => {
     const store = openStore();
     try {
       const { memory, existing } = store.create({
@@ -86,7 +86,7 @@ program
           : `${green('saved')} ${memory.id}`,
       );
       if (!existing) {
-        for (const conflict of store.findConflicts(memory)) {
+        for (const conflict of await store.detectConflicts(memory)) {
           console.log(yellow(`⚠ possibly conflicts with ${conflict.id}: ${conflict.body}`));
         }
       }
@@ -125,7 +125,7 @@ async function executeImport(
   }
   const store = openStore();
   try {
-    runImport(store, extraction, {
+    await runImport(store, extraction, {
       source,
       scope: opts.scope,
       tags: parseTags(opts.tags),

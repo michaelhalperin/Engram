@@ -86,8 +86,8 @@ function asTags(value: unknown): string[] | undefined {
   return undefined;
 }
 
-function withConflicts(store: Store, memory: Memory): Memory & { conflicts: Memory[] } {
-  return { ...memory, conflicts: store.findConflicts(memory) };
+async function withConflicts(store: Store, memory: Memory): Promise<Memory & { conflicts: Memory[] }> {
+  return { ...memory, conflicts: await store.detectConflicts(memory) };
 }
 
 /** Hashed vite assets under /assets/, plus the odd root-level file (favicon). */
@@ -153,7 +153,9 @@ export function startUi(store: Store, opts: { port?: number } = {}): Promise<UiH
           counts: store.counts(),
           stale: store.staleCount(),
           facets: store.facets(),
-          inbox: store.list({ status: 'unreviewed', limit: 100 }).map((m) => withConflicts(store, m)),
+          inbox: await Promise.all(
+            store.list({ status: 'unreviewed', limit: 100 }).map((m) => withConflicts(store, m)),
+          ),
           memories,
         });
       }
@@ -169,7 +171,7 @@ export function startUi(store: Store, opts: { port?: number } = {}): Promise<UiH
         return send(res, 200, {
           memory,
           history: store.history(memory.id),
-          conflicts: store.findConflicts(memory),
+          conflicts: await store.detectConflicts(memory),
         });
       }
 
@@ -192,7 +194,7 @@ export function startUi(store: Store, opts: { port?: number } = {}): Promise<UiH
         return send(res, existing ? 200 : 201, {
           memory,
           existing,
-          conflicts: existing ? [] : store.findConflicts(memory),
+          conflicts: existing ? [] : await store.detectConflicts(memory),
         });
       }
 

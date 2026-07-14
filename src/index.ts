@@ -1,4 +1,10 @@
-export { Store, defaultHome, type SyncResult } from './store/store.js';
+export {
+  CONFLICT_SEMANTIC_ALONE,
+  CONFLICT_SEMANTIC_VETO,
+  Store,
+  defaultHome,
+  type SyncResult,
+} from './store/store.js';
 export { isPotentialConflict, overlapScore, tokenSet } from './store/conflicts.js';
 export { renderProfile } from './store/profile.js';
 export {

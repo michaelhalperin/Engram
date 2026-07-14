@@ -53,8 +53,8 @@ describe('parseFactLines', () => {
 });
 
 describe('importFacts', () => {
-  it('lands everything unreviewed, attributed to the importer', () => {
-    const report = importFacts(
+  it('lands everything unreviewed, attributed to the importer', async () => {
+    const report = await importFacts(
       store,
       [{ text: 'Prefers dark mode.' }, { text: 'Deploys on Fridays.', scope: 'acme-api' }],
       { source: 'import:text' },
@@ -66,19 +66,19 @@ describe('importFacts', () => {
     expect(store.counts().unreviewed).toBe(2);
   });
 
-  it('skips facts already in the vault — re-running an import is a no-op', () => {
+  it('skips facts already in the vault — re-running an import is a no-op', async () => {
     store.create({ text: 'Prefers dark mode.', source: 'cli' });
     const facts = [{ text: 'prefers  dark mode.' }, { text: 'New fact.' }];
-    const first = importFacts(store, facts, { source: 'import:text' });
+    const first = await importFacts(store, facts, { source: 'import:text' });
     expect(first.added.map((m) => m.body)).toEqual(['New fact.']);
     expect(first.duplicates).toBe(1);
-    const rerun = importFacts(store, facts, { source: 'import:text' });
+    const rerun = await importFacts(store, facts, { source: 'import:text' });
     expect(rerun.added).toHaveLength(0);
     expect(rerun.duplicates).toBe(2);
   });
 
-  it('applies option overrides and keeps provenance timestamps', () => {
-    const report = importFacts(
+  it('applies option overrides and keeps provenance timestamps', async () => {
+    const report = await importFacts(
       store,
       [{ text: 'Standup is at 10am.', created: '2024-01-05T09:00:00.000Z', tags: ['team'] }],
       { source: 'import:text', scope: 'acme-api', tags: ['imported'], type: 'project' },
@@ -91,17 +91,17 @@ describe('importFacts', () => {
     expect(memory.tags).toEqual(['team', 'imported']);
   });
 
-  it('flags likely contradictions against existing memories', () => {
+  it('flags likely contradictions against existing memories', async () => {
     store.create({ text: 'Standup is at 10am every day.', source: 'cli' });
-    const report = importFacts(store, [{ text: 'Standup is at 9:30am every day.' }], {
+    const report = await importFacts(store, [{ text: 'Standup is at 9:30am every day.' }], {
       source: 'import:text',
     });
     expect(report.conflicts).toHaveLength(1);
     expect(report.conflicts[0].existing.body).toContain('10am');
   });
 
-  it('captures refusals instead of aborting the batch', () => {
-    const report = importFacts(
+  it('captures refusals instead of aborting the batch', async () => {
+    const report = await importFacts(
       store,
       [{ text: 'x'.repeat(MAX_BODY_BYTES + 1) }, { text: 'Small fact survives.' }],
       { source: 'import:text' },
@@ -111,9 +111,9 @@ describe('importFacts', () => {
     expect(report.added.map((m) => m.body)).toEqual(['Small fact survives.']);
   });
 
-  it('dry run writes nothing and dedupes within the batch', () => {
+  it('dry run writes nothing and dedupes within the batch', async () => {
     store.create({ text: 'Already known fact.', source: 'cli' });
-    const report = importFacts(
+    const report = await importFacts(
       store,
       [{ text: 'Already known fact.' }, { text: 'Fresh fact.' }, { text: 'fresh  fact.' }],
       { source: 'import:text', dryRun: true },

@@ -33,7 +33,7 @@ export async function runReview(store: Store): Promise<void> {
   try {
     for (const memory of queue) {
       console.log(`\n${memoryCard(memory)}`);
-      for (const conflict of store.findConflicts(memory)) {
+      for (const conflict of await store.detectConflicts(memory)) {
         console.log(yellow(`  ⚠ possibly conflicts with ${conflict.id}: ${conflict.body}`));
       }
       const answer = (

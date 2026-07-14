@@ -50,7 +50,11 @@ export interface ImportReport {
  * it triages agent writes. Re-running an import is safe: facts are matched by
  * normalized body, so anything already known is skipped, not duplicated.
  */
-export function importFacts(store: Store, facts: ImportedFact[], opts: ImportOptions): ImportReport {
+export async function importFacts(
+  store: Store,
+  facts: ImportedFact[],
+  opts: ImportOptions,
+): Promise<ImportReport> {
   const report: ImportReport = { added: [], planned: [], duplicates: 0, errors: [], conflicts: [] };
   const plannedBodies = new Set<string>();
   for (const fact of facts) {
@@ -82,7 +86,7 @@ export function importFacts(store: Store, facts: ImportedFact[], opts: ImportOpt
         continue;
       }
       report.added.push(memory);
-      const conflict = store.findConflicts(memory, 1)[0];
+      const conflict = (await store.detectConflicts(memory, 1))[0];
       if (conflict) report.conflicts.push({ added: memory, existing: conflict });
     } catch (err) {
       report.errors.push({ text: truncate(text), error: (err as Error).message });

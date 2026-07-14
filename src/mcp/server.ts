@@ -70,8 +70,8 @@ export function createEngramServer(store: Store): McpServer {
   const effectiveScope = (scope: string | undefined): string | undefined =>
     scope ?? process.env.ENGRAM_SCOPE ?? undefined;
 
-  const conflictWarning = (memory: Memory): string => {
-    const conflicts = store.findConflicts(memory);
+  const conflictWarning = async (memory: Memory): Promise<string> => {
+    const conflicts = await store.detectConflicts(memory);
     if (conflicts.length === 0) return '';
     const rendered = conflicts
       .map((c) => `  [${c.id}] ${c.body.length > 200 ? `${c.body.slice(0, 200)} …` : c.body}`)
@@ -110,7 +110,7 @@ export function createEngramServer(store: Store): McpServer {
         });
         if (existing) return text(`Already known as ${memory.id} — nothing new stored.`);
         return text(
-          `Remembered as ${memory.id}. It is marked unreviewed until the user approves it (\`engram review\`).${conflictWarning(memory)}`,
+          `Remembered as ${memory.id}. It is marked unreviewed until the user approves it (\`engram review\`).${await conflictWarning(memory)}`,
         );
       } catch (err) {
         return text((err as Error).message, true);
