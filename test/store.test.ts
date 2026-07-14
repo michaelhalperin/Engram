@@ -49,6 +49,31 @@ describe('create / get roundtrip', () => {
     expect(readdirSync(join(home, 'memories'))).toHaveLength(1);
   });
 
+  it('keeps a provenance created timestamp — and starts stale until reviewed', () => {
+    const { memory } = store.create({
+      text: 'Michael has been using vim since 2019.',
+      source: 'import:chatgpt',
+      status: 'unreviewed',
+      created: '2024-03-15T10:00:00.000Z',
+    });
+    expect(memory.id).toMatch(/^20240315-/);
+    expect(memory.created).toBe('2024-03-15T10:00:00.000Z');
+    expect(memory.lastConfirmed).toBe('2024-03-15T10:00:00.000Z');
+    expect(store.staleCount()).toBe(1);
+    // Human review is a fresh assertion that the fact is still true.
+    const approved = store.approve(memory.id);
+    expect(Date.parse(approved.lastConfirmed)).toBeGreaterThan(Date.parse(memory.created));
+    expect(store.staleCount()).toBe(0);
+  });
+
+  it('ignores invalid or future created timestamps', () => {
+    const future = new Date(Date.now() + 86_400_000).toISOString();
+    const a = store.create({ text: 'Fact from the future.', source: 'cli', created: future });
+    expect(Date.parse(a.memory.created)).toBeLessThanOrEqual(Date.now());
+    const b = store.create({ text: 'Fact with a broken date.', source: 'cli', created: 'not-a-date' });
+    expect(Date.parse(b.memory.created)).toBeLessThanOrEqual(Date.now());
+  });
+
   it('rejects empty and oversized bodies', () => {
     expect(() => store.create({ text: '   ', source: 'cli' })).toThrow(/empty/);
     expect(() => store.create({ text: 'x'.repeat(MAX_BODY_BYTES + 1), source: 'cli' })).toThrow(

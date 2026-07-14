@@ -37,6 +37,12 @@ export interface CreateInput {
   status?: MemoryStatus;
   pinned?: boolean;
   scope?: string;
+  /**
+   * When the fact was originally recorded, if known (importers pass the source
+   * tool's timestamp). Also seeds `lastConfirmed`, so old imported facts start
+   * out stale until a human reviews them. Invalid or absent = now.
+   */
+  created?: string;
 }
 
 export interface UpdatePatch {

@@ -122,18 +122,18 @@ export class Store {
       const memory = this.get(duplicate);
       if (memory) return { memory, existing: true };
     }
-    const now = new Date().toISOString();
+    const created = parseIso(input.created) ?? new Date().toISOString();
     const memory: Memory = {
-      id: makeId(body, now, (candidate) => existsSync(this.pathFor(candidate))),
+      id: makeId(body, created, (candidate) => existsSync(this.pathFor(candidate))),
       type: input.type ?? 'fact',
       tags: (input.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean),
       source: input.source.trim() || 'unknown',
       status: input.status ?? 'active',
       pinned: input.pinned ?? false,
       scope: normalizeScope(input.scope),
-      created: now,
-      updated: now,
-      lastConfirmed: now,
+      created,
+      updated: created,
+      lastConfirmed: created,
       body,
     };
     this.writeFile(memory);
@@ -364,6 +364,14 @@ export class Store {
     const stat = statSync(path);
     this.db.upsert(memory, bodyHash(memory.body), Math.floor(stat.mtimeMs), stat.size);
   }
+}
+
+function parseIso(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  // Clocks skew and exports lie; a "created" in the future would rank as freshly confirmed.
+  return date.getTime() > Date.now() ? undefined : date.toISOString();
 }
 
 function validateBody(body: string): void {
