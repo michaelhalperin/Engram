@@ -6,7 +6,7 @@ const ok = (msg: string) => console.log(`${green('✓')} ${msg}`);
 const warn = (msg: string) => console.log(`${yellow('!')} ${msg}`);
 const bad = (msg: string) => console.log(`${red('✗')} ${msg}`);
 
-export function runDoctor(home: string): void {
+export async function runDoctor(home: string): Promise<void> {
   let failures = 0;
 
   const [major, minor] = process.versions.node.split('.').map(Number);
@@ -58,6 +58,17 @@ export function runDoctor(home: string): void {
 
   const probe = store.search('engram-doctor-self-test', { limit: 1 });
   if (Array.isArray(probe)) ok('full-text search (FTS5) works');
+
+  const semantics = await store.semantics();
+  if (semantics) {
+    const { embedded } = await semantics.ensureFresh();
+    const suffix = embedded > 0 ? ` (${embedded} just caught up)` : '';
+    ok(`semantic search active — ${semantics.embedder.model}${suffix}`);
+  } else {
+    const { loadEmbedder } = await import('../store/embedder.js');
+    const { reason } = await loadEmbedder(store.home);
+    warn(`semantic search off: ${reason ?? 'unavailable'} — keyword search still works`);
+  }
 
   store.close();
   console.log();

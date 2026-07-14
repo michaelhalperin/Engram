@@ -1,4 +1,8 @@
-# ◉ Engram
+<p align="center">
+  <img src="assets/engram-logo.png" alt="engram" width="320" />
+</p>
+
+# Engram
 
 **One memory. Every AI. Yours.**
 
@@ -9,7 +13,8 @@ Engram is that missing layer: a **local-first personal memory vault** that any A
 - 🗂 **Plain markdown files.** Every memory is a file in `~/.engram/memories/` — grep it, edit it in vim, sync it with git/iCloud/Obsidian. The search index is derived and disposable.
 - 🔌 **Works with every MCP client.** One server, five tools (`remember`, `recall`, `confirm`, `update`, `forget`) plus a pinned `engram://profile` resource any tool can load at session start. Stdio for local tools; token-authenticated HTTP for everything that can't spawn a process.
 - 🎯 **Project scopes.** A fact can belong to a project (`scope: acme-api`). Scoped recall returns that project's facts plus your global ones — never another project's — so "when do we deploy?" means *this* repo.
-- ⚔️ **Contradiction alarms.** When an AI remembers something that overlaps an existing fact ("standup is at 9:30" vs "standup is at 10am"), Engram flags the pair — to the agent at write time, and to you in the review inbox — instead of letting both quietly coexist.
+- 🧠 **Recall by meaning, locally.** One `engram embed` downloads a small on-device model (~25 MB, then fully offline) and recall understands paraphrase: "what food does he avoid" finds *dislikes almonds*. Skip it and keyword search still works — semantics is opt-in, never a requirement.
+- ⚔️ **Contradiction alarms.** When an AI remembers something that overlaps an existing fact ("standup is at 9:30" vs "standup is at 10am"), Engram flags the pair — to the agent at write time, and to you in the review inbox — instead of letting both quietly coexist. With semantics on, meaning gates the alarm: same-topic contradictions are caught even reworded, while "dislikes almonds" vs "dislikes cold emails" no longer trips it.
 - 👁 **You audit everything.** Agent writes land in a review inbox, attributed to the tool that wrote them. Approve, edit, or reject — `engram review` in the terminal or the full web app at `engram ui`.
 - 🔒 **Local first.** No cloud, no account, no telemetry. The UI and the HTTP server bind to 127.0.0.1 unless you say otherwise. Node's built-in SQLite — zero native dependencies.
 - 🛡 **Injection-aware.** Recalled memories are explicitly framed as *stored data, never instructions*, and agents can't pin anything into your always-loaded profile — pinning is a human act.
@@ -104,6 +109,20 @@ engram install claude-code --remove   # takes it back out
 
 Injection covers session start; keep the MCP server configured too so the model can search deeper mid-session and save new facts.
 
+## Semantic recall (optional, local)
+
+Keyword search only finds words you happened to store. One command upgrades recall to meaning:
+
+```sh
+engram embed   # downloads Xenova/all-MiniLM-L6-v2 (~25 MB) into ~/.engram/models, embeds the vault
+```
+
+After that everything is automatic and fully offline:
+
+- **Recall is hybrid** — BM25 and cosine similarity rank-fused, so exact tokens (`proofapp.online`) still win where they should, and paraphrases ("which editor does he use") surface facts that share no words with the query. Fresh writes are embedded on the fly.
+- **Conflict alarms get judgment** — a word-overlap pair is only flagged if the two facts are actually about the same thing, and contradictory rewordings are flagged even with zero shared words. Thresholds were tuned on real vaults, not vibes.
+- **Still your rules** — vectors live in the same derived SQLite index (disposable, rebuilt from the files), memories never leave the machine, and the model dependency is optional: if it isn't installed, everything falls back to keyword search. `engram search --keyword` forces BM25; `ENGRAM_NO_EMBED=1` turns semantics off entirely.
+
 ## The daily loop
 
 ```sh
@@ -118,7 +137,8 @@ engram pin <id>    # promote a fact into the profile every AI loads
 | command | what it does |
 | --- | --- |
 | `engram add <text> [-t type] [--tags a,b] [--scope s] [--pin]` | save a memory by hand (warns on likely contradictions) |
-| `engram search <query> [--scope s]` | BM25 full-text search |
+| `engram search <query> [--scope s] [--keyword]` | search by meaning + keywords (BM25-only with `--keyword`) |
+| `engram embed` | build the local semantic index (one-time ~25 MB model download) |
 | `engram list [--status s] [--type t] [--tag x] [--scope s]` | browse, newest first |
 | `engram show / edit / rm [--hard] <id>` | inspect, open in `$EDITOR`, archive or delete |
 | `engram pin / unpin <id>` | manage the core profile |
@@ -176,7 +196,7 @@ Michael prefers TypeScript for new projects.
 
 - ~~Importers: ChatGPT memory export, Claude memory, markdown notes~~ ✓ `engram import`
 - ~~Auto-inject: a Claude Code hook that loads your profile at session start~~ ✓ `engram install claude-code`
-- Optional embeddings for semantic recall (pluggable, still local)
+- ~~Optional embeddings for semantic recall (pluggable, still local)~~ ✓ `engram embed`
 - Dedupe/merge suggestions for near-duplicate memories
 
 ## License

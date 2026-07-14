@@ -522,8 +522,8 @@ function readStdinWithTimeout(timeoutMs = 800): Promise<string> {
 program
   .command('doctor')
   .description('check that engram is healthy on this machine')
-  .action(() => {
-    runDoctor(home());
+  .action(async () => {
+    await runDoctor(home());
   });
 
 program.parseAsync().catch((err: Error) => fail(err.message));
