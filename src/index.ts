@@ -1,6 +1,13 @@
 export { Store, defaultHome, type SyncResult } from './store/store.js';
 export { isPotentialConflict, overlapScore, tokenSet } from './store/conflicts.js';
 export { renderProfile } from './store/profile.js';
+export {
+  DEFAULT_EMBED_MODEL,
+  loadEmbedder,
+  type Embedder,
+  type EmbedderStatus,
+} from './store/embedder.js';
+export { MIN_RECALL_SIMILARITY, Semantics, type SemanticHit } from './store/semantic.js';
 export { renderSessionContext, scopeForDirectory } from './store/session.js';
 export {
   MEMORY_STATUSES,

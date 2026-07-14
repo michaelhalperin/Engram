@@ -12,6 +12,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { isPotentialConflict, scopesCanConflict, tokenSet } from './conflicts.js';
 import { IndexDb } from './db.js';
+import { loadEmbedder, type Embedder } from './embedder.js';
+import { Semantics } from './semantic.js';
 import { bodyHash, makeId, normalizeScope, parseMemoryFile, serializeMemory } from './files.js';
 import {
   MAX_BODY_BYTES,
@@ -50,6 +52,7 @@ export class Store {
   readonly dbPath: string;
   private db: IndexDb;
   private lastSync = 0;
+  private semanticsState?: Promise<Semantics | undefined>;
 
   constructor(home: string = defaultHome()) {
     this.home = home;
@@ -62,6 +65,37 @@ export class Store {
 
   close(): void {
     this.db.close();
+  }
+
+  /** Inject an embedder (tests use fakes; `engram embed` passes a download-enabled one). */
+  attachEmbedder(embedder: Embedder): void {
+    this.semanticsState = Promise.resolve(new Semantics(this.db, embedder));
+  }
+
+  /**
+   * The semantic layer, or undefined when no local model is available (not
+   * downloaded yet, dependency missing, or disabled). Loading happens once per
+   * store and never downloads anything — that is `engram embed`'s job.
+   */
+  semantics(): Promise<Semantics | undefined> {
+    this.semanticsState ??= loadEmbedder(this.home).then(({ embedder }) =>
+      embedder ? new Semantics(this.db, embedder) : undefined,
+    );
+    return this.semanticsState;
+  }
+
+  /**
+   * Update the vector index to match the files. Returns undefined when
+   * semantics is unavailable; callers treat that as "keyword search only".
+   */
+  async embedIndex(): Promise<
+    { model: string; embedded: number; pruned: number; total: number } | undefined
+  > {
+    const semantics = await this.semantics();
+    if (!semantics) return undefined;
+    this.maybeSync();
+    const { embedded, pruned } = await semantics.ensureFresh();
+    return { model: semantics.embedder.model, embedded, pruned, total: this.db.embeddingCount(semantics.embedder.model) };
   }
 
   pathFor(id: string): string {

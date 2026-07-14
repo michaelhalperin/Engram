@@ -15,7 +15,7 @@ const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
 process.emitWarning = originalEmitWarning;
 
 /** Bump when SCHEMA changes shape; the index is derived, so we rebuild instead of migrating. */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS memories (
@@ -39,6 +39,12 @@ CREATE INDEX IF NOT EXISTS idx_memories_status ON memories(status);
 CREATE INDEX IF NOT EXISTS idx_memories_hash ON memories(hash);
 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
   id UNINDEXED, body, tags, tokenize = 'porter unicode61'
+);
+CREATE TABLE IF NOT EXISTS embeddings (
+  id     TEXT PRIMARY KEY,
+  model  TEXT NOT NULL,
+  hash   TEXT NOT NULL,
+  vector BLOB NOT NULL
 );
 `;
 
@@ -90,15 +96,34 @@ const SCOPE_BOOST = 1.15;
 const FRESHNESS_FLOOR = 0.6;
 const FRESHNESS_HALF_LIFE_DAYS = 365;
 
+/**
+ * Trust × freshness × scope-affinity multiplier, shared by keyword and
+ * semantic ranking so both kinds of relevance are shaded by the same rules.
+ */
+export function trustMultiplier(
+  m: { status: string; pinned: boolean; lastConfirmed: string; scope?: string },
+  now: number,
+  scope?: string,
+): number {
+  const confirmed = Date.parse(m.lastConfirmed);
+  const days = Number.isFinite(confirmed) ? Math.max(0, (now - confirmed) / DAY_MS) : Infinity;
+  const freshness = FRESHNESS_FLOOR + (1 - FRESHNESS_FLOOR) * 2 ** (-days / FRESHNESS_HALF_LIFE_DAYS);
+  const trust = (m.status === 'unreviewed' ? UNREVIEWED_WEIGHT : 1) * (m.pinned ? PINNED_BOOST : 1);
+  const affinity = scope !== undefined && m.scope === scope ? SCOPE_BOOST : 1;
+  return trust * freshness * affinity;
+}
+
 /** Higher is better. Blends BM25 relevance with trust (status, pinned), freshness, and scope affinity. */
 function scoreHit(row: Row, now: number, scope?: string): number {
   const relevance = -(row.rank ?? 0); // fts5 bm25 rank: more negative = better match
-  const confirmed = Date.parse(row.last_confirmed);
-  const days = Number.isFinite(confirmed) ? Math.max(0, (now - confirmed) / DAY_MS) : Infinity;
-  const freshness = FRESHNESS_FLOOR + (1 - FRESHNESS_FLOOR) * 2 ** (-days / FRESHNESS_HALF_LIFE_DAYS);
-  const trust = (row.status === 'unreviewed' ? UNREVIEWED_WEIGHT : 1) * (row.pinned === 1 ? PINNED_BOOST : 1);
-  const affinity = scope !== undefined && row.scope === scope ? SCOPE_BOOST : 1;
-  return relevance * trust * freshness * affinity;
+  return (
+    relevance *
+    trustMultiplier(
+      { status: row.status, pinned: row.pinned === 1, lastConfirmed: row.last_confirmed, scope: row.scope || undefined },
+      now,
+      scope,
+    )
+  );
 }
 
 /** `null` when the query contains no indexable terms. */
@@ -128,7 +153,9 @@ export class IndexDb {
     };
     if (version !== SCHEMA_VERSION) {
       // Older (or newer) index layout: drop it and let sync() rebuild from the files.
-      this.db.exec('DROP TABLE IF EXISTS memories; DROP TABLE IF EXISTS memories_fts;');
+      this.db.exec(
+        'DROP TABLE IF EXISTS memories; DROP TABLE IF EXISTS memories_fts; DROP TABLE IF EXISTS embeddings;',
+      );
       this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     }
     this.db.exec(SCHEMA);
@@ -185,10 +212,78 @@ export class IndexDb {
   remove(id: string): void {
     this.db.prepare('DELETE FROM memories WHERE id = ?').run(id);
     this.db.prepare('DELETE FROM memories_fts WHERE id = ?').run(id);
+    this.db.prepare('DELETE FROM embeddings WHERE id = ?').run(id);
   }
 
   clear(): void {
-    this.db.exec('DELETE FROM memories; DELETE FROM memories_fts;');
+    this.db.exec('DELETE FROM memories; DELETE FROM memories_fts; DELETE FROM embeddings;');
+  }
+
+  /** Non-archived memories whose vector is missing or was made with a different body/model. */
+  pendingEmbeddings(model: string): Array<{ id: string; body: string; hash: string }> {
+    return this.db
+      .prepare(
+        `SELECT m.id, m.body, m.hash FROM memories m
+         LEFT JOIN embeddings e ON e.id = m.id AND e.model = ?
+         WHERE m.status != 'archived' AND (e.id IS NULL OR e.hash != m.hash)`,
+      )
+      .all(model) as unknown as Array<{ id: string; body: string; hash: string }>;
+  }
+
+  /** Drop vectors that no longer correspond to a live memory (or came from another model). */
+  pruneEmbeddings(model: string): number {
+    const result = this.db
+      .prepare(
+        `DELETE FROM embeddings WHERE model != ?
+         OR id NOT IN (SELECT id FROM memories WHERE status != 'archived')`,
+      )
+      .run(model);
+    return Number(result.changes);
+  }
+
+  upsertEmbedding(id: string, model: string, hash: string, vector: Uint8Array): void {
+    this.db
+      .prepare(
+        `INSERT INTO embeddings (id, model, hash, vector) VALUES (?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET model = excluded.model, hash = excluded.hash, vector = excluded.vector`,
+      )
+      .run(id, model, hash, vector);
+  }
+
+  getEmbedding(id: string, model: string): Uint8Array | undefined {
+    const row = this.db
+      .prepare('SELECT vector FROM embeddings WHERE id = ? AND model = ?')
+      .get(id, model) as { vector: Uint8Array } | undefined;
+    return row?.vector;
+  }
+
+  embeddingCount(model: string): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS n FROM embeddings WHERE model = ?').get(model) as {
+      n: number;
+    };
+    return row.n;
+  }
+
+  /** Every embedded, non-archived memory with its vector — the brute-force search corpus. */
+  embeddingRows(
+    model: string,
+    opts: { status?: Memory['status']; scope?: string } = {},
+  ): Array<{ memory: Memory; vector: Uint8Array }> {
+    const conditions = ['e.model = ?', opts.status ? 'm.status = ?' : "m.status != 'archived'"];
+    const params: Array<string | number> = [model];
+    if (opts.status) params.push(opts.status);
+    if (opts.scope !== undefined) {
+      conditions.push("(m.scope = '' OR m.scope = ?)");
+      params.push(opts.scope);
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT m.*, e.vector AS vector FROM embeddings e
+         JOIN memories m ON m.id = e.id
+         WHERE ${conditions.join(' AND ')}`,
+      )
+      .all(...params) as unknown as Array<Row & { vector: Uint8Array }>;
+    return rows.map((row) => ({ memory: rowToMemory(row), vector: row.vector }));
   }
 
   byHash(hash: string): string | undefined {

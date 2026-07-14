@@ -318,6 +318,29 @@ program
   });
 
 program
+  .command('embed')
+  .description('build the semantic search index (first run downloads a ~25 MB local model, then fully offline)')
+  .action(async () => {
+    const { loadEmbedder } = await import('../store/embedder.js');
+    const store = openStore();
+    try {
+      console.log(dim('loading embedding model (first run downloads it — may take a minute)…'));
+      const status = await loadEmbedder(store.home, { download: true });
+      if (!status.embedder) fail(status.reason ?? 'no embedder available');
+      store.attachEmbedder(status.embedder);
+      const result = await store.embedIndex();
+      if (!result) fail('embedding index unavailable');
+      console.log(
+        `${green('✓')} semantic index ready — ${result.total} memories embedded with ${result.model}` +
+          dim(` (${result.embedded} new, ${result.pruned} pruned)`),
+      );
+      console.log(dim('recall and conflict detection now understand meaning, not just keywords'));
+    } finally {
+      store.close();
+    }
+  });
+
+program
   .command('reindex')
   .description('rebuild the search index from the markdown files')
   .action(() => {
