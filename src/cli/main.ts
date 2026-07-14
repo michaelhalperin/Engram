@@ -163,6 +163,18 @@ withImportOptions(
 
 withImportOptions(
   importCmd
+    .command('claude')
+    .description('Claude Code project memories (default: ~/.claude/projects) or a pasted claude.ai memory summary (.txt)')
+    .argument('[path]'),
+).action((path: string | undefined, opts: ImportCliOpts) =>
+  executeImport('import:claude', opts, async () => {
+    const { extractClaudeFacts } = await import('../import/claude.js');
+    return extractClaudeFacts(path);
+  }),
+);
+
+withImportOptions(
+  importCmd
     .command('markdown')
     .description('a folder of markdown notes (Obsidian-style) — one note per memory')
     .argument('<dir>'),

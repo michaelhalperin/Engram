@@ -24,6 +24,7 @@ export {
 } from './import/core.js';
 export { parseFactLines } from './import/text.js';
 export { extractChatgptFacts } from './import/chatgpt.js';
+export { extractClaudeFacts } from './import/claude.js';
 export { listZipEntries, unzipEntry } from './import/zip.js';
 export { extractMarkdownNotes } from './import/markdown.js';
 export { VERSION } from './version.js';
